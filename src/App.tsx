@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Expand,
-  Hexagon,
   Move,
   Redo2,
   Trash2,
@@ -209,7 +208,10 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div className="brand"><span><Hexagon size={19} /></span><strong>Evren Jeofizik</strong></div>
+        <div className="brand">
+          <img className="brand-logo" src="/icons/evren-jeofizik-logo.svg" alt="Evren Jeofizik logosu" />
+          <strong>Evren Jeofizik <span>GIS</span></strong>
+        </div>
         <div className="header-actions">
           <span className="stat-pill violet">{polygons.length} pol</span>
           <span className="stat-pill blue">{totalPoints} pkt</span>

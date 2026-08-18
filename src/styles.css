@@ -9,6 +9,8 @@
   --purple: #7c3aed;
   --amber: #f59e0b;
   --green: #10b981;
+  --brand-charcoal: #25272b;
+  --brand-orange: #d5842a;
   --line: #e6ebf1;
   --muted: #8d99aa;
 }
@@ -26,8 +28,10 @@ button { color: inherit; }
   box-shadow: 0 2px 12px rgba(31,41,55,.06); backdrop-filter: blur(14px);
 }
 .brand, .header-actions { display: flex; align-items: center; gap: 8px; }
-.brand > span { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 11px; color: white; background: linear-gradient(135deg, #119bd5, #2870e8); box-shadow: 0 5px 15px rgba(27,128,220,.25); }
-.brand strong { font-size: 13px; letter-spacing: -.01em; }
+.brand { min-width: 0; }
+.brand-logo { flex: 0 0 auto; width: 36px; height: 36px; object-fit: contain; border: 1px solid rgba(213,132,42,.28); border-radius: 11px; background: #f4f1ea; box-shadow: 0 4px 12px rgba(75,54,33,.18); }
+.brand strong { display: inline-flex; align-items: baseline; gap: 4px; color: var(--brand-charcoal); font-size: 13px; letter-spacing: -.01em; white-space: nowrap; }
+.brand strong span { color: var(--brand-orange); }
 .header-actions { gap: 6px; }
 .header-actions button { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; color: #7d8a9b; background: transparent; cursor: pointer; transition: .18s ease; }
 .header-actions button:hover:not(:disabled) { background: #eef4f8; color: #26364a; }
@@ -58,12 +62,9 @@ button { color: inherit; }
 .map-number-marker.is-active { transform: scale(1.06); box-shadow: 0 0 0 3px color-mix(in srgb, var(--marker) 30%, transparent), 0 3px 10px rgba(15,23,42,.25); }
 .des-marker { display: block; width: 10px; height: 10px; border-radius: 2px; background: #10b981; border: 1px solid white; box-shadow: 0 1px 4px rgba(4,120,87,.45); }
 
-.coordinate-card { position: absolute; left: 16px; top: 20px; z-index: 500; width: min(270px, calc(100vw - 150px)); min-width: 178px; padding: 9px 11px; display: grid; gap: 5px; contain: layout paint; text-align: left; font-variant-numeric: tabular-nums; border: 1px solid rgba(226,232,240,.9); border-radius: 14px; background: rgba(255,255,255,.93); box-shadow: 0 5px 18px rgba(15,23,42,.13); backdrop-filter: blur(12px); }
-.coordinate-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.coordinate-card-head strong { font-size: 10px; color: #536174; }
-.coordinate-card-head button { padding: 3px 7px; border: 0; border-radius: 7px; color: #2563b8; background: #edf5ff; font-size: 9px; font-weight: 750; cursor: pointer; }
+.coordinate-card { position: absolute; left: 16px; top: 20px; z-index: 500; width: min(245px, calc(100vw - 150px)); min-width: 190px; padding: 9px 11px; display: grid; gap: 5px; contain: layout paint; text-align: left; font-variant-numeric: tabular-nums; border: 1px solid rgba(226,232,240,.9); border-radius: 14px; background: rgba(255,255,255,.93); box-shadow: 0 5px 18px rgba(15,23,42,.13); backdrop-filter: blur(12px); }
 .coordinate-copy { min-width: 0; padding: 0; display: flex; align-items: center; justify-content: space-between; gap: 7px; border: 0; color: #285ea9; background: transparent; text-align: left; cursor: copy; }
-.coordinate-copy span { min-width: 0; overflow: hidden; font: 700 10px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.coordinate-copy span { min-width: 0; font: 700 10px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
 .coordinate-copy svg { flex: 0 0 auto; color: #6783a8; }
 .coordinate-card em { font-style: normal; font-size: 11px; font-weight: 750; color: #14845f; }
 .map-mode-actions { position: absolute; right: 16px; top: 20px; z-index: 500; display: grid; gap: 8px; justify-items: end; }
@@ -253,11 +254,13 @@ button { color: inherit; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, -8px); } }
 
 @media (max-width: 760px) {
-  .brand strong { display: none; }
+  .brand { gap: 6px; }
+  .brand-logo { width: 34px; height: 34px; border-radius: 10px; }
+  .brand strong { font-size: 11px; }
   .stat-pill.green, .header-divider, .header-actions button:nth-of-type(3), .header-actions button:nth-of-type(4) { display: none; }
   .app-header { padding-inline: 8px; }
   .active-strip { padding-inline: 9px; }
-  .coordinate-card { left: 9px; top: 10px; width: min(190px, calc(100vw - 120px)); min-width: 145px; padding: 7px 9px; background: rgba(255,255,255,.98); box-shadow: 0 3px 10px rgba(15,23,42,.11); backdrop-filter: none; }
+  .coordinate-card { left: 9px; top: 10px; width: min(210px, calc(100vw - 112px)); min-width: 180px; padding: 8px 9px; background: rgba(255,255,255,.98); box-shadow: 0 3px 10px rgba(15,23,42,.11); backdrop-filter: none; }
   .map-mode-actions { right: 9px; top: 10px; }
   .map-mode-actions button { min-width: 90px; height: 35px; padding: 0 10px; font-size: 10px; }
   .locate-button { left: 10px; bottom: 94px; width: 44px; height: 44px; }
@@ -276,11 +279,12 @@ button { color: inherit; }
 }
 
 @media (max-width: 390px) {
+  .brand strong { font-size: 10px; }
+  .stat-pill.violet { display: none; }
   .stat-pill { padding: 4px 7px; }
   .header-actions { gap: 3px; }
   .header-actions button { width: 27px; }
-  .coordinate-card { min-width: 145px; }
-  .coordinate-card-head strong { font-size: 9px; }
+  .coordinate-card { min-width: 172px; }
   .coordinate-copy span { font-size: 9px; }
   .map-mode-actions button { min-width: 82px; }
   .unit-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }

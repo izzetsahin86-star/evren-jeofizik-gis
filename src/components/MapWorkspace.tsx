@@ -3,7 +3,7 @@ import L, { type LeafletMouseEvent, type Map as LeafletMap } from 'leaflet'
 import { Circle, CircleMarker, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, useMapEvents } from 'react-leaflet'
 import { Check, Copy, Crosshair, LocateFixed, MousePointer2, Ruler, Trash2, Undo2 } from 'lucide-react'
 import { analyzePolygon, formatAreaShort, formatNumber, formatPoint, MAP_CENTER, pointBearing, pointDistance } from '../geo'
-import type { BaseLayerId, CoordinateFormat, GeoPoint, PolygonLayer } from '../types'
+import type { BaseLayerId, GeoPoint, PolygonLayer } from '../types'
 
 const tileLayers: Record<BaseLayerId, { url: string; attribution: string }> = {
   street: {
@@ -19,13 +19,6 @@ const tileLayers: Record<BaseLayerId, { url: string; attribution: string }> = {
     attribution: '© OpenStreetMap · OpenTopoMap',
   },
 }
-
-const coordinateFormats: Array<{ value: CoordinateFormat; label: string }> = [
-  { value: 'latlon', label: 'Lat/Lon' },
-  { value: 'utm', label: 'UTM' },
-  { value: 'dms', label: 'DMS' },
-  { value: 'ddm', label: 'DDM' },
-]
 
 type MapPosition = { lat: number; lng: number }
 
@@ -122,21 +115,14 @@ interface CoordinateCardProps {
 
 function CoordinateCard({ positionListener, areaM2 }: CoordinateCardProps) {
   const [position, setPosition] = useState<MapPosition>({ lat: MAP_CENTER[0], lng: MAP_CENTER[1] })
-  const [format, setFormat] = useState<CoordinateFormat>('latlon')
   const [copied, setCopied] = useState(false)
   const point = useMemo<GeoPoint>(() => ({ id: 'map-position', ...position }), [position])
-  const formatted = useMemo(() => formatPoint(point, format), [point, format])
-  const formatLabel = coordinateFormats.find((item) => item.value === format)?.label ?? 'Lat/Lon'
+  const formatted = useMemo(() => formatPoint(point, 'utm'), [point])
 
   useEffect(() => {
     positionListener.current = setPosition
     return () => { positionListener.current = () => undefined }
   }, [positionListener])
-
-  const cycleFormat = () => {
-    const index = coordinateFormats.findIndex((item) => item.value === format)
-    setFormat(coordinateFormats[(index + 1) % coordinateFormats.length].value)
-  }
 
   const copyCoordinate = async () => {
     try {
@@ -156,12 +142,8 @@ function CoordinateCard({ positionListener, areaM2 }: CoordinateCardProps) {
   }
 
   return (
-    <section className="coordinate-card" aria-label="Harita koordinatı">
-      <div className="coordinate-card-head">
-        <strong>Hedef Koordinatı</strong>
-        <button type="button" onClick={cycleFormat} aria-label="Koordinat biçimini değiştir">{formatLabel}</button>
-      </div>
-      <button type="button" className="coordinate-copy" onClick={copyCoordinate} title="Koordinatı kopyala">
+    <section className="coordinate-card" aria-label="UTM harita koordinatı">
+      <button type="button" className="coordinate-copy" onClick={copyCoordinate} title="UTM koordinatını kopyala">
         <span>{formatted}</span>{copied ? <Check size={14} /> : <Copy size={14} />}
       </button>
       {areaM2 > 0 && <em>{formatAreaShort(areaM2)} alan</em>}

@@ -2,7 +2,6 @@ import { useMemo, useState, type ChangeEvent } from 'react'
 import {
   AlertTriangle,
   Calculator,
-  Camera,
   CheckCircle2,
   ChevronDown,
   CircleDot,
@@ -22,13 +21,13 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
-  Sparkles,
   Trash2,
   Upload,
   Wifi,
   WifiOff,
   X,
 } from 'lucide-react'
+import { scanCoordinateDocument, type DocumentScanProgress, type DocumentScanResult } from '../documentCoordinates'
 import {
   analyzePolygon,
   deltaEastNorth,
@@ -185,7 +184,10 @@ function CoordinatePanel(props: BottomPanelProps) {
   const [easting, setEasting] = useState('')
   const [northing, setNorthing] = useState('')
   const [bulk, setBulk] = useState('')
-  const [ocrBusy, setOcrBusy] = useState(false)
+  const [documentBusy, setDocumentBusy] = useState(false)
+  const [documentProgress, setDocumentProgress] = useState<DocumentScanProgress>({ percent: 0, label: '' })
+  const [documentScan, setDocumentScan] = useState<DocumentScanResult | null>(null)
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(() => new Set())
   const [visiblePointCount, setVisiblePointCount] = useState(200)
 
   const addSingle = () => {
@@ -218,58 +220,128 @@ function CoordinatePanel(props: BottomPanelProps) {
     props.onMessage(`${points.length} koordinat eklendi.`, 'success')
   }
 
-  const readCoordinateFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+  const readCoordinateDocument = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target
+    const file = input.files?.[0]
     if (!file) return
-    if (file.type.startsWith('image/')) {
-      setOcrBusy(true)
-      props.onMessage('Belge taranıyor; işlem görüntü boyutuna göre biraz sürebilir.', 'info')
-      try {
-        const { recognize } = await import('tesseract.js')
-        const result = await recognize(file, 'eng')
-        setBulk(result.data.text)
-        props.onMessage('Görseldeki metin okundu ve toplu koordinat alanına aktarıldı.', 'success')
-      } catch {
-        props.onMessage('Görsel okunamadı. Daha net bir belge deneyin.', 'error')
-      } finally {
-        setOcrBusy(false)
-      }
-      event.target.value = ''
-      return
+    setDocumentBusy(true)
+    setDocumentScan(null)
+    setSelectedDocumentIds(new Set())
+    setDocumentProgress({ percent: 1, label: 'Belge hazırlanıyor…' })
+    props.onMessage('Belgedeki koordinatlar aranıyor. Taranmış sayfalarda OCR otomatik çalışır.', 'info')
+    try {
+      const result = await scanCoordinateDocument(file, { zone, hemisphere, datum }, setDocumentProgress)
+      setDocumentScan(result)
+      setSelectedDocumentIds(new Set(result.candidates.map((candidate) => candidate.id)))
+      props.onMessage(
+        result.candidates.length ? `${result.candidates.length} geçerli koordinat bulundu.` : 'Belgede geçerli koordinat bulunamadı.',
+        result.candidates.length ? 'success' : 'error',
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Belge okunamadı.'
+      props.onMessage(message, 'error')
+    } finally {
+      setDocumentBusy(false)
+      input.value = ''
     }
-    if (file.name.toLowerCase().endsWith('.pdf')) {
-      props.onMessage('PDF için sayfayı görsel olarak dışa aktarıp yükleyin; görsel OCR yerel olarak çalışır.', 'info')
-      event.target.value = ''
-      return
-    }
-    setBulk(await file.text())
-    props.onMessage('Belgedeki metin toplu koordinat alanına aktarıldı.', 'success')
-    event.target.value = ''
   }
 
-  const readCsv = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    const text = await file.text()
-    const points = text.split(/\r?\n/).slice(1).map((line) => {
-      const values = line.split(/[;,]/).map((item) => item.trim())
-      if (values.length >= 2 && Math.abs(Number(values[0])) <= 90 && Math.abs(Number(values[1])) <= 180) {
-        return { lat: Number(values[0]), lng: Number(values[1]) }
-      }
-      if (values.length >= 2) return fromUtm(Number(values[0]), Number(values[1]), Number(values[2] || zone), (values[3]?.toUpperCase() === 'S' ? 'S' : 'N'), values[4] || datum)
-      return null
-    }).filter((point): point is Omit<GeoPoint, 'id'> => Boolean(point && Number.isFinite(point.lat) && Number.isFinite(point.lng)))
+  const toggleDocumentCandidate = (id: string) => {
+    setSelectedDocumentIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAllDocumentCandidates = () => {
+    if (!documentScan) return
+    setSelectedDocumentIds((current) => (
+      current.size === documentScan.candidates.length
+        ? new Set()
+        : new Set(documentScan.candidates.map((candidate) => candidate.id))
+    ))
+  }
+
+  const addDocumentCoordinates = () => {
+    if (!documentScan) return
+    const points = documentScan.candidates
+      .filter((candidate) => selectedDocumentIds.has(candidate.id))
+      .map(({ lat, lng }) => ({ lat, lng }))
+    if (!points.length) {
+      props.onMessage('Eklenecek en az bir koordinat seçin.', 'error')
+      return
+    }
     props.onAddPoints(points)
-    props.onMessage(`${points.length} CSV koordinatı eklendi.`, points.length ? 'success' : 'error')
-    event.target.value = ''
+    props.onMessage(`${points.length} belge koordinatı poligona eklendi.`, 'success')
+    setDocumentScan(null)
+    setSelectedDocumentIds(new Set())
+    setDocumentProgress({ percent: 0, label: '' })
   }
 
   return (
     <div className="panel-stack">
       <div className="active-layer-chip"><span style={{ background: active.color }} /> <strong>Aktif: {active.name}</strong><em>{active.points.length} nokta</em></div>
 
-      <label className={`document-button secondary${ocrBusy ? ' is-busy' : ''}`}><Camera size={18} /> {ocrBusy ? 'Belge Okunuyor…' : 'Belgeden Koordinat Al (AI)'}<input type="file" accept=".txt,.csv,.pdf,image/*" onChange={readCoordinateFile} disabled={ocrBusy} /></label>
-      <label className={`document-button gradient${ocrBusy ? ' is-busy' : ''}`}><Sparkles size={18} /> {ocrBusy ? 'OCR İşleniyor…' : 'AI + OCR ile Koordinat Al'}<input type="file" accept=".txt,.csv,.pdf,image/*" onChange={readCoordinateFile} disabled={ocrBusy} /></label>
+      <Card title="Belgeden Koordinat Al" subtitle="Koordinatları bulur, doğrular ve eklemeden önce gösterir" icon={<FileSearch size={19} />} tone="green">
+        <label className={`dropzone document-coordinate-dropzone${documentBusy ? ' is-busy' : ''}`}>
+          <FileUp size={29} />
+          <strong>{documentBusy ? documentProgress.label : 'Belge veya görsel seçin'}</strong>
+          <small>PDF, Word, TXT, CSV, JPG, PNG ve WEBP</small>
+          <input type="file" accept=".pdf,.docx,.txt,.csv,.tsv,text/plain,text/csv,image/png,image/jpeg,image/webp" onChange={readCoordinateDocument} disabled={documentBusy} />
+        </label>
+        {documentBusy && (
+          <div className="document-scan-progress" role="status" aria-live="polite">
+            <span style={{ width: `${documentProgress.percent}%` }} />
+            <output>{documentProgress.percent}%</output>
+          </div>
+        )}
+        <p className="form-note">Metin tabanlı PDF ve Word belgeleri doğrudan okunur. Taranmış PDF sayfaları ve fotoğraflarda OCR otomatik devreye girer.</p>
+        <div className="form-grid three">
+          <Field label="Varsayılan Zone"><select value={zone} onChange={(event) => setZone(Number(event.target.value))}>{Array.from({ length: 6 }, (_, i) => 32 + i).map((value) => <option key={value}>{value}</option>)}</select></Field>
+          <Field label="Yarımküre"><select value={hemisphere} onChange={(event) => setHemisphere(event.target.value as 'N' | 'S')}><option value="N">Kuzey</option><option value="S">Güney</option></select></Field>
+          <Field label="Datum"><select value={datum} onChange={(event) => setDatum(event.target.value)}><option>WGS84</option><option>ED50</option></select></Field>
+        </div>
+
+        {documentScan && (
+          <div className="document-coordinate-results">
+            <div className="document-result-summary">
+              <span><small>Belge</small><strong>{documentScan.fileName}</strong></span>
+              <span><small>Bulunan</small><strong>{documentScan.candidates.length}</strong></span>
+              <span><small>Okuma</small><strong>{documentScan.usedOcr ? 'Metin + OCR' : 'Metin'}</strong></span>
+            </div>
+            {documentScan.warning && <p className="form-note warning"><AlertTriangle size={14} />{documentScan.warning}</p>}
+            {documentScan.candidates.length ? (
+              <>
+                <label className="document-select-all">
+                  <input
+                    type="checkbox"
+                    checked={selectedDocumentIds.size === documentScan.candidates.length}
+                    onChange={toggleAllDocumentCandidates}
+                  />
+                  <span>Tümünü seç</span>
+                  <strong>{selectedDocumentIds.size}/{documentScan.candidates.length}</strong>
+                </label>
+                <div className="document-coordinate-list">
+                  {documentScan.candidates.map((candidate, index) => (
+                    <label key={candidate.id} className="document-coordinate-row">
+                      <input type="checkbox" checked={selectedDocumentIds.has(candidate.id)} onChange={() => toggleDocumentCandidate(candidate.id)} />
+                      <span className={`document-format-badge format-${candidate.format.toLowerCase().replace('/', '-')}`}>{candidate.format}</span>
+                      <span className="document-coordinate-value">
+                        <strong>{index + 1}. {candidate.lat.toFixed(6)}, {candidate.lng.toFixed(6)}</strong>
+                        <small>{candidate.source} · {candidate.sourceKind}</small>
+                        <code title={candidate.raw}>{candidate.raw}</code>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <button type="button" className="primary-button" onClick={addDocumentCoordinates} disabled={!selectedDocumentIds.size}><Plus size={18} /> Seçilen {selectedDocumentIds.size} Koordinatı Ekle</button>
+              </>
+            ) : <EmptyState><FileSearch size={28} /><strong>Koordinat bulunamadı</strong><span>Belge netliğini ve varsayılan UTM ayarlarını kontrol edin</span></EmptyState>}
+          </div>
+        )}
+      </Card>
 
       <Card title="Koordinat Ekle" icon={<MapPin size={19} />}>
         <Segmented value={format} options={coordinateOptions} onChange={setFormat} ariaLabel="Koordinat biçimi" />
@@ -301,11 +373,6 @@ function CoordinatePanel(props: BottomPanelProps) {
         </Field>
         <p className="form-note">Her satıra bir koordinat yazın. # ile başlayan satırlar atlanır.</p>
         <button type="button" className="primary-button purple" onClick={addBulk}><Plus size={18} /> Koordinatları Ekle</button>
-      </Card>
-
-      <Card title="CSV İçe Aktar" subtitle="Dosyadan koordinat yükleyin" icon={<FileUp size={19} />} tone="green">
-        <label className="dropzone"><Upload size={26} /><strong>CSV dosyası seçin</strong><small>Lat, Lon veya Easting, Northing, Zone, Yarımküre, Datum</small><input type="file" accept=".csv,text/csv" onChange={readCsv} /></label>
-        <button type="button" className="secondary-button" onClick={() => downloadBlob('Latitude,Longitude\n39.9255,32.8663', 'koordinat-sablonu.csv', 'text/csv;charset=utf-8')}><FileDown size={16} /> Şablon İndir</button>
       </Card>
 
       <Card title="Koordinatlar" subtitle={`${active.points.length} nokta`} icon={<CircleDot size={19} />}>

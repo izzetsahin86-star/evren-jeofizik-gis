@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import L, { type LeafletMouseEvent, type Map as LeafletMap } from 'leaflet'
 import { MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, useMapEvents } from 'react-leaflet'
 import { Crosshair, LocateFixed, MousePointer2, Plus } from 'lucide-react'
@@ -41,19 +41,77 @@ function desIcon() {
 interface EventBridgeProps {
   addMode: boolean
   onAddPoint: (point: Omit<GeoPoint, 'id'>) => void
-  onMousePosition: (point: { lat: number; lng: number }) => void
+  positionListener: MutableRefObject<(point: MapPosition) => void>
 }
 
-function EventBridge({ addMode, onAddPoint, onMousePosition }: EventBridgeProps) {
+type MapPosition = { lat: number; lng: number }
+
+function EventBridge({ addMode, onAddPoint, positionListener }: EventBridgeProps) {
+  const pendingPosition = useRef<MapPosition | null>(null)
+  const timer = useRef<number | null>(null)
+  const coarsePointer = useRef(window.matchMedia('(pointer: coarse)').matches)
+
+  const flushPosition = useCallback(() => {
+    if (timer.current !== null) window.clearTimeout(timer.current)
+    timer.current = null
+    if (!pendingPosition.current) return
+    positionListener.current(pendingPosition.current)
+    pendingPosition.current = null
+  }, [positionListener])
+
+  const queuePosition = useCallback((point: MapPosition) => {
+    pendingPosition.current = point
+    if (timer.current === null) timer.current = window.setTimeout(flushPosition, 80)
+  }, [flushPosition])
+
+  useEffect(() => () => {
+    if (timer.current !== null) window.clearTimeout(timer.current)
+  }, [])
+
   useMapEvents({
     click(event: LeafletMouseEvent) {
       if (addMode) onAddPoint({ lat: event.latlng.lat, lng: event.latlng.lng })
     },
     mousemove(event: LeafletMouseEvent) {
-      onMousePosition({ lat: event.latlng.lat, lng: event.latlng.lng })
+      if (!coarsePointer.current) queuePosition({ lat: event.latlng.lat, lng: event.latlng.lng })
+    },
+    move(event) {
+      if (!coarsePointer.current) return
+      const center = event.target.getCenter()
+      queuePosition({ lat: center.lat, lng: center.lng })
+    },
+    moveend(event) {
+      if (!coarsePointer.current) return
+      const center = event.target.getCenter()
+      pendingPosition.current = { lat: center.lat, lng: center.lng }
+      flushPosition()
     },
   })
   return null
+}
+
+interface CoordinateCardProps {
+  mapRef: MutableRefObject<LeafletMap | null>
+  positionListener: MutableRefObject<(point: MapPosition) => void>
+  areaM2: number
+}
+
+function CoordinateCard({ mapRef, positionListener, areaM2 }: CoordinateCardProps) {
+  const [position, setPosition] = useState<MapPosition>({ lat: MAP_CENTER[0], lng: MAP_CENTER[1] })
+  const utm = useMemo(() => toUtm(position.lat, position.lng), [position])
+
+  useEffect(() => {
+    positionListener.current = setPosition
+    return () => { positionListener.current = () => undefined }
+  }, [positionListener])
+
+  return (
+    <button type="button" className="coordinate-card" onClick={() => mapRef.current?.flyTo([position.lat, position.lng], Math.max(mapRef.current.getZoom(), 15))}>
+      <strong>{position.lat.toFixed(5)}°N&nbsp; {position.lng.toFixed(5)}°E</strong>
+      <span>{utm.zone}{utm.hemisphere}&nbsp; {utm.easting.toFixed(0)}&nbsp; {utm.northing.toFixed(0)}</span>
+      {areaM2 > 0 && <em>{formatAreaShort(areaM2)} alan</em>}
+    </button>
+  )
 }
 
 interface MapWorkspaceProps {
@@ -84,10 +142,9 @@ export default function MapWorkspace({
   onLocate,
 }: MapWorkspaceProps) {
   const mapRef = useRef<LeafletMap | null>(null)
-  const [mousePosition, setMousePosition] = useState({ lat: MAP_CENTER[0], lng: MAP_CENTER[1] })
+  const positionListener = useRef<(point: MapPosition) => void>(() => undefined)
   const active = polygons.find((layer) => layer.id === activeId) ?? polygons[0]
   const analysis = useMemo(() => analyzePolygon(active?.points ?? []), [active])
-  const utm = useMemo(() => toUtm(mousePosition.lat, mousePosition.lng), [mousePosition])
 
   useEffect(() => {
     const timer = window.setTimeout(() => mapRef.current?.invalidateSize(), 240)
@@ -128,7 +185,7 @@ export default function MapWorkspace({
         className="map-canvas"
       >
         <TileLayer key={baseLayer} url={tileLayers[baseLayer].url} attribution={tileLayers[baseLayer].attribution} />
-        <EventBridge addMode={addMode} onAddPoint={onAddPoint} onMousePosition={setMousePosition} />
+        <EventBridge addMode={addMode} onAddPoint={onAddPoint} positionListener={positionListener} />
         {polygons.map((layer) => {
           const isActive = layer.id === activeId
           return (
@@ -169,11 +226,7 @@ export default function MapWorkspace({
         })}
       </MapContainer>
 
-      <button type="button" className="coordinate-card" onClick={() => mapRef.current?.flyTo([mousePosition.lat, mousePosition.lng], Math.max(mapRef.current.getZoom(), 15))}>
-        <strong>{mousePosition.lat.toFixed(5)}°N&nbsp; {mousePosition.lng.toFixed(5)}°E</strong>
-        <span>{utm.zone}{utm.hemisphere}&nbsp; {utm.easting.toFixed(0)}&nbsp; {utm.northing.toFixed(0)}</span>
-        {analysis.areaM2 > 0 && <em>{formatAreaShort(analysis.areaM2)} alan</em>}
-      </button>
+      <CoordinateCard mapRef={mapRef} positionListener={positionListener} areaM2={analysis.areaM2} />
 
       <div className="map-mode-actions">
         <button type="button" className={addMode ? 'is-active' : ''} onClick={onToggleAddMode}>
@@ -188,7 +241,7 @@ export default function MapWorkspace({
         <LocateFixed size={22} />
       </button>
 
-      <div className="map-crosshair" aria-hidden="true"><Crosshair size={48} strokeWidth={1.5} /></div>
+      <div className="map-crosshair" aria-hidden="true"><Crosshair size={24} strokeWidth={1.4} /></div>
     </main>
   )
 }

@@ -1,6 +1,7 @@
 export type CoordinateFormat = 'utm' | 'latlon' | 'dms' | 'ddm'
 export type BaseLayerId = 'street' | 'satellite' | 'topographic'
 export type PanelId = 'layers' | 'coordinates' | 'tools' | 'import' | 'export'
+export type PerformanceMode = 'auto' | 'on' | 'off'
 
 export interface GeoPoint {
   id: string
@@ -13,8 +14,18 @@ export interface PolygonLayer {
   id: string
   name: string
   color: string
+  strokeWidth?: number
+  strokeOpacity?: number
+  fillOpacity?: number
   points: GeoPoint[]
   desPoints: GeoPoint[]
+}
+
+export interface PolygonAppearance {
+  color: string
+  strokeWidth: number
+  strokeOpacity: number
+  fillOpacity: number
 }
 
 export interface SavedProject {

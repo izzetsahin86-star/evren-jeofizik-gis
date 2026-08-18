@@ -11,26 +11,41 @@ import {
 import BottomPanel from './components/BottomPanel'
 import MapWorkspace from './components/MapWorkspace'
 import { dockItems } from './dock'
-import { POLYGON_COLORS, analyzePolygon, formatAreaShort, uid } from './geo'
-import type { BaseLayerId, GeoPoint, PanelId, PolygonLayer, SavedProject } from './types'
+import { DEFAULT_POLYGON_APPEARANCE, POLYGON_COLORS, analyzePolygon, formatAreaShort, uid } from './geo'
+import type { BaseLayerId, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer, SavedProject } from './types'
 
 const WORKSPACE_KEY = 'evren-jeofizik-gis-workspace-v1'
 const PROJECTS_KEY = 'evren-jeofizik-gis-projects-v1'
+const PERFORMANCE_KEY = 'evren-jeofizik-gis-performance-v1'
 
 function createPolygon(index = 0): PolygonLayer {
   return {
     id: uid('polygon'),
     name: `Poligon ${index + 1}`,
     color: POLYGON_COLORS[index % POLYGON_COLORS.length],
+    ...DEFAULT_POLYGON_APPEARANCE,
     points: [],
     desPoints: [],
+  }
+}
+
+function normalizePolygon(layer: Partial<PolygonLayer>, index: number): PolygonLayer {
+  return {
+    id: layer.id || uid('polygon'),
+    name: layer.name || `Poligon ${index + 1}`,
+    color: layer.color || POLYGON_COLORS[index % POLYGON_COLORS.length],
+    strokeWidth: layer.strokeWidth ?? DEFAULT_POLYGON_APPEARANCE.strokeWidth,
+    strokeOpacity: layer.strokeOpacity ?? DEFAULT_POLYGON_APPEARANCE.strokeOpacity,
+    fillOpacity: layer.fillOpacity ?? DEFAULT_POLYGON_APPEARANCE.fillOpacity,
+    points: Array.isArray(layer.points) ? layer.points : [],
+    desPoints: Array.isArray(layer.desPoints) ? layer.desPoints : [],
   }
 }
 
 function readWorkspace() {
   try {
     const value = JSON.parse(localStorage.getItem(WORKSPACE_KEY) || 'null')
-    if (Array.isArray(value) && value.length) return value as PolygonLayer[]
+    if (Array.isArray(value) && value.length) return value.map(normalizePolygon)
   } catch { /* Empty storage uses a fresh workspace. */ }
   return [createPolygon()]
 }
@@ -38,7 +53,7 @@ function readWorkspace() {
 function readProjects() {
   try {
     const value = JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]')
-    return Array.isArray(value) ? value as SavedProject[] : []
+    return Array.isArray(value) ? value.map((project: SavedProject) => ({ ...project, polygons: project.polygons.map(normalizePolygon) })) : []
   } catch { return [] }
 }
 
@@ -55,12 +70,19 @@ export default function App() {
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>(readProjects)
   const [fitRequest, setFitRequest] = useState(0)
   const [flyTarget, setFlyTarget] = useState<{ lat: number; lng: number; zoom?: number } | null>(null)
+  const [performanceMode, setPerformanceMode] = useState<PerformanceMode>(() => {
+    const saved = localStorage.getItem(PERFORMANCE_KEY)
+    return saved === 'on' || saved === 'off' ? saved : 'auto'
+  })
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [toast, setToast] = useState<{ id: string; message: string; tone: 'success' | 'error' | 'info' } | null>(null)
   const undoStack = useRef<PolygonLayer[][]>([])
   const redoStack = useRef<PolygonLayer[][]>([])
 
   const active = polygons.find((layer) => layer.id === activeId) ?? polygons[0]
   const totalPoints = polygons.reduce((sum, layer) => sum + layer.points.length, 0)
+  const totalDesPoints = polygons.reduce((sum, layer) => sum + layer.desPoints.length, 0)
+  const performanceActive = performanceMode === 'on' || (performanceMode === 'auto' && (totalPoints > 350 || totalDesPoints > 1200))
   const activeAnalysis = useMemo(() => analyzePolygon(active?.points ?? []), [active])
 
   useEffect(() => {
@@ -70,6 +92,20 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(PROJECTS_KEY, JSON.stringify(savedProjects))
   }, [savedProjects])
+
+  useEffect(() => {
+    localStorage.setItem(PERFORMANCE_KEY, performanceMode)
+  }, [performanceMode])
+
+  useEffect(() => {
+    const updateConnection = () => setIsOnline(navigator.onLine)
+    window.addEventListener('online', updateConnection)
+    window.addEventListener('offline', updateConnection)
+    return () => {
+      window.removeEventListener('online', updateConnection)
+      window.removeEventListener('offline', updateConnection)
+    }
+  }, [])
 
   useEffect(() => {
     if (!toast) return
@@ -112,9 +148,9 @@ export default function App() {
     updatePolygons((current) => current.map((layer) => layer.id === activeId ? fn(layer) : layer))
   }
 
-  const addPoints = (points: Array<Omit<GeoPoint, 'id'>>) => {
+  const addPoints = (points: Array<Omit<GeoPoint, 'id'>>, fit = true) => {
     mutateActive((layer) => ({ ...layer, points: [...layer.points, ...points.map((point) => ({ ...point, id: uid('pt') }))] }))
-    window.setTimeout(() => setFitRequest((value) => value + 1), 80)
+    if (fit) window.setTimeout(() => setFitRequest((value) => value + 1), 80)
   }
 
   const updatePoint = (pointId: string, point: Omit<GeoPoint, 'id'>) => {
@@ -191,6 +227,8 @@ export default function App() {
         <span className="strip-color" style={{ background: active?.color }} />
         <strong>{active?.name ?? 'Poligon'}</strong>
         <span>{active?.points.length ?? 0} nokta</span>
+        {performanceActive && <span className="strip-status performance">Hızlı mod</span>}
+        <span className={`strip-status ${isOnline ? 'online' : 'offline'}`}>{isOnline ? 'Çevrimiçi' : 'Çevrimdışı'}</span>
       </div>
 
       <MapWorkspace
@@ -199,12 +237,14 @@ export default function App() {
         baseLayer={baseLayer}
         addMode={addMode}
         panelOpen={Boolean(activePanel)}
+        performanceMode={performanceActive}
         fitRequest={fitRequest}
         flyTarget={flyTarget}
         onToggleAddMode={() => setAddMode((value) => !value)}
-        onAddPoint={(point) => addPoints([point])}
+        onAddPoint={(point) => addPoints([point], false)}
         onUpdatePoint={updatePoint}
         onLocate={(point) => setFlyTarget({ ...point, zoom: 17 })}
+        onMessage={message}
       />
 
       {activePanel && (
@@ -214,12 +254,17 @@ export default function App() {
           activeId={activeId}
           baseLayer={baseLayer}
           savedProjects={savedProjects}
+          performanceMode={performanceMode}
+          performanceActive={performanceActive}
+          isOnline={isOnline}
           onClose={() => setActivePanel(null)}
           onSetBaseLayer={setBaseLayer}
           onSetActive={setActiveId}
           onNewPolygon={newPolygon}
           onRenamePolygon={(id, name) => updatePolygons((current) => current.map((layer) => layer.id === id ? { ...layer, name } : layer))}
           onCycleColor={(id) => updatePolygons((current) => current.map((layer) => layer.id === id ? { ...layer, color: POLYGON_COLORS[(POLYGON_COLORS.indexOf(layer.color) + 1) % POLYGON_COLORS.length] } : layer))}
+          onSetPolygonStyle={(id, appearance: Partial<PolygonAppearance>) => setPolygonsState((current) => current.map((layer) => layer.id === id ? { ...layer, ...appearance } : layer))}
+          onSetPerformanceMode={setPerformanceMode}
           onDeletePolygon={deletePolygon}
           onDuplicatePolygon={duplicatePolygon}
           onAddPoints={addPoints}

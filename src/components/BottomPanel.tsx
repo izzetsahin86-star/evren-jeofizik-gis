@@ -1,7 +1,9 @@
 import { useMemo, useState, type ChangeEvent } from 'react'
 import {
+  AlertTriangle,
   Calculator,
   Camera,
+  CheckCircle2,
   ChevronDown,
   CircleDot,
   Copy,
@@ -10,6 +12,7 @@ import {
   FileSearch,
   FileUp,
   FolderOpen,
+  Gauge,
   Grid3X3,
   Layers3,
   MapPin,
@@ -18,9 +21,12 @@ import {
   Plus,
   Save,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   Upload,
+  Wifi,
+  WifiOff,
   X,
 } from 'lucide-react'
 import {
@@ -42,7 +48,8 @@ import {
   readSpatialFile,
   toUtm,
 } from '../geo'
-import type { BaseLayerId, CoordinateFormat, GeoPoint, PanelId, PolygonLayer, SavedProject } from '../types'
+import { exportProjectPdf } from '../report'
+import type { BaseLayerId, CoordinateFormat, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer, SavedProject } from '../types'
 import { Card, EmptyState, Field, Segmented } from './PanelUi'
 
 const coordinateOptions: Array<{ value: CoordinateFormat; label: string }> = [
@@ -66,12 +73,17 @@ interface BottomPanelProps {
   activeId: string
   baseLayer: BaseLayerId
   savedProjects: SavedProject[]
+  performanceMode: PerformanceMode
+  performanceActive: boolean
+  isOnline: boolean
   onClose: () => void
   onSetBaseLayer: (layer: BaseLayerId) => void
   onSetActive: (id: string) => void
   onNewPolygon: () => void
   onRenamePolygon: (id: string, name: string) => void
   onCycleColor: (id: string) => void
+  onSetPolygonStyle: (id: string, appearance: Partial<PolygonAppearance>) => void
+  onSetPerformanceMode: (mode: PerformanceMode) => void
   onDeletePolygon: (id: string) => void
   onDuplicatePolygon: (id: string) => void
   onAddPoints: (points: Array<Omit<GeoPoint, 'id'>>) => void
@@ -88,6 +100,7 @@ interface BottomPanelProps {
 }
 
 function LayerPanel(props: BottomPanelProps) {
+  const active = props.polygons.find((layer) => layer.id === props.activeId) ?? props.polygons[0]
   return (
     <div className="panel-stack">
       <Card title="Harita Görünümü" icon={<Layers3 size={19} />}>
@@ -127,6 +140,24 @@ function LayerPanel(props: BottomPanelProps) {
           <button type="button" className="secondary-button" onClick={props.onFitActive}>Haritada Göster</button>
         </div>
       </Card>
+
+      <Card title="Poligon Görünümü" subtitle={`Aktif: ${active.name}`} icon={<SlidersHorizontal size={19} />} tone="green">
+        <div className="appearance-grid">
+          <Field label="Renk"><input className="color-input" type="color" value={active.color} onChange={(event) => props.onSetPolygonStyle(active.id, { color: event.target.value })} /></Field>
+          <Field label={`Çizgi · ${active.strokeWidth ?? 3}px`}><input type="range" min="1" max="8" step="1" value={active.strokeWidth ?? 3} onChange={(event) => props.onSetPolygonStyle(active.id, { strokeWidth: Number(event.target.value) })} /></Field>
+          <Field label={`Çizgi görünürlüğü · ${Math.round((active.strokeOpacity ?? 1) * 100)}%`}><input type="range" min="0.15" max="1" step="0.05" value={active.strokeOpacity ?? 1} onChange={(event) => props.onSetPolygonStyle(active.id, { strokeOpacity: Number(event.target.value) })} /></Field>
+          <Field label={`Dolgu · ${Math.round((active.fillOpacity ?? 0.14) * 100)}%`}><input type="range" min="0" max="0.6" step="0.02" value={active.fillOpacity ?? 0.14} onChange={(event) => props.onSetPolygonStyle(active.id, { fillOpacity: Number(event.target.value) })} /></Field>
+        </div>
+      </Card>
+
+      <Card title="Büyük Proje Performansı" subtitle="Yoğun noktalarda haritayı akıcı tutar" icon={<Gauge size={19} />} tone="amber">
+        <Segmented value={props.performanceMode} ariaLabel="Performans modu" options={[{ value: 'auto', label: 'Otomatik' }, { value: 'on', label: 'Açık' }, { value: 'off', label: 'Kapalı' }]} onChange={props.onSetPerformanceMode} />
+        <div className={`mode-status ${props.performanceActive ? 'is-active' : ''}`}><Gauge size={16} /><span><strong>{props.performanceActive ? 'Hızlı çizim aktif' : 'Normal çizim aktif'}</strong><small>{props.performanceActive ? 'Köşe ve DES işaretleri örneklenerek gösteriliyor.' : 'Tüm köşe ve DES işaretleri gösteriliyor.'}</small></span></div>
+      </Card>
+
+      <Card title="Çevrimdışı Saha Modu" subtitle="Uygulama ve ziyaret edilen harita kareleri saklanır" icon={props.isOnline ? <Wifi size={19} /> : <WifiOff size={19} />}>
+        <div className={`mode-status ${props.isOnline ? 'is-online' : 'is-offline'}`}>{props.isOnline ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}<span><strong>{props.isOnline ? 'Çevrimiçi · önbellek hazırlanıyor' : 'Çevrimdışı çalışıyorsunuz'}</strong><small>İnternet varken gezdiğiniz harita bölgeleri saha kullanımı için cihazda tutulur.</small></span></div>
+      </Card>
     </div>
   )
 }
@@ -144,6 +175,7 @@ function CoordinatePanel(props: BottomPanelProps) {
   const [northing, setNorthing] = useState('')
   const [bulk, setBulk] = useState('')
   const [ocrBusy, setOcrBusy] = useState(false)
+  const [visiblePointCount, setVisiblePointCount] = useState(200)
 
   const addSingle = () => {
     const point = format === 'utm'
@@ -270,10 +302,12 @@ function CoordinatePanel(props: BottomPanelProps) {
           <>
             <div className="list-toolbar"><Segmented value={listFormat} options={coordinateOptions.map((option) => ({ ...option, label: option.label.split(' ')[0] }))} onChange={setListFormat} ariaLabel="Liste biçimi" /><button type="button" className="danger-text" onClick={props.onClearPoints}>Tümünü Sil</button></div>
             <ol className="coordinate-list">
-              {active.points.map((point, index) => (
+              {active.points.slice(0, visiblePointCount).map((point, index) => (
                 <li key={point.id}><span className="point-number" style={{ background: active.color }}>{index + 1}</span><code>{formatPoint(point, listFormat, zone, datum)}</code><button type="button" onClick={() => props.onDeletePoint(point.id)} aria-label={`${index + 1}. noktayı sil`}><Trash2 size={15} /></button></li>
               ))}
             </ol>
+            {active.points.length > visiblePointCount && <button type="button" className="secondary-button" onClick={() => setVisiblePointCount((value) => value + 200)}>Sonraki 200 noktayı göster · {active.points.length - visiblePointCount} kaldı</button>}
+            {active.points.length > 500 && <p className="form-note">Liste performans için bölümler hâlinde gösteriliyor.</p>}
           </>
         ) : <EmptyState><MapPin size={28} /><strong>Henüz koordinat eklenmedi</strong><span>Poligon çizmek için en az 3 nokta ekleyin</span></EmptyState>}
       </Card>
@@ -427,18 +461,30 @@ function ToolsPanel(props: BottomPanelProps) {
 
 function ImportPanel(props: BottomPanelProps) {
   const [projectName, setProjectName] = useState('')
+  const [readingImport, setReadingImport] = useState(false)
+  const [pendingImport, setPendingImport] = useState<{ name: string; size: number; layers: PolygonLayer[] } | null>(null)
   const importFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
+    setReadingImport(true)
     try {
       const layers = await readSpatialFile(file)
       if (!layers.length) throw new Error('Katman bulunamadı')
-      props.onImportLayers(layers)
-      props.onMessage(`${layers.length} katman haritaya eklendi.`, 'success')
+      setPendingImport({ name: file.name, size: file.size, layers })
+      props.onMessage('Dosya okundu. İçe aktarmadan önce önizlemeyi kontrol edin.', 'info')
     } catch (error) {
       props.onMessage(error instanceof Error ? error.message : 'Dosya okunamadı.', 'error')
+      setPendingImport(null)
+    } finally {
+      setReadingImport(false)
     }
     event.target.value = ''
+  }
+  const confirmImport = () => {
+    if (!pendingImport) return
+    props.onImportLayers(pendingImport.layers)
+    props.onMessage(`${pendingImport.layers.length} katman haritaya eklendi.`, 'success')
+    setPendingImport(null)
   }
   const save = () => {
     if (!projectName.trim()) return
@@ -448,9 +494,17 @@ function ImportPanel(props: BottomPanelProps) {
   }
   return (
     <div className="panel-stack">
-      <Card title="KML / KMZ İçe Aktar" subtitle="Haritaya katman olarak ekle" icon={<FileUp size={19} />} tone="green">
-        <label className="dropzone tall"><Upload size={32} /><strong>Dosyayı buraya sürükle veya tıkla</strong><small>.kml, .kmz, .geojson ve .json destekleniyor</small><input type="file" accept=".kml,.kmz,.geojson,.json" onChange={importFile} /></label>
+      <Card title="Mekânsal Veri İçe Aktar" subtitle="Önizle, kontrol et ve haritaya ekle" icon={<FileUp size={19} />} tone="green">
+        <label className={`dropzone tall${readingImport ? ' is-busy' : ''}`}><Upload size={32} /><strong>{readingImport ? 'Dosya okunuyor…' : 'Dosyayı buraya sürükle veya tıkla'}</strong><small>KML, KMZ, GeoJSON, JSON ve CSV destekleniyor</small><input type="file" accept=".kml,.kmz,.geojson,.json,.csv,text/csv" onChange={importFile} disabled={readingImport} /></label>
       </Card>
+      {pendingImport && (
+        <Card title="İçe Aktarma Önizlemesi" subtitle={`${pendingImport.name} · ${formatNumber(pendingImport.size / 1024, 1)} KB`} icon={<FileSearch size={19} />} tone="amber">
+          <div className="import-summary"><span><small>Katman</small><strong>{pendingImport.layers.length}</strong></span><span><small>Nokta</small><strong>{pendingImport.layers.reduce((sum, layer) => sum + layer.points.length, 0)}</strong></span><span><small>Geçerli geometri</small><strong>{pendingImport.layers.filter((layer) => layer.points.length >= 2).length}</strong></span></div>
+          <div className="import-preview-list">{pendingImport.layers.slice(0, 12).map((layer) => <div key={layer.id}><span style={{ background: layer.color }} /><strong>{layer.name}</strong><small>{layer.points.length} nokta · {layer.points.length >= 3 ? 'Poligon' : layer.points.length === 2 ? 'Hat' : 'Nokta'}</small></div>)}{pendingImport.layers.length > 12 && <p>+ {pendingImport.layers.length - 12} katman daha</p>}</div>
+          {pendingImport.layers.some((layer) => layer.points.length < 2) && <p className="form-note warning"><AlertTriangle size={13} /> İki noktadan az kayıtlar poligon veya hat oluşturmaz; yine de nokta olarak eklenir.</p>}
+          <div className="preview-actions"><button type="button" className="secondary-button" onClick={() => setPendingImport(null)}><X size={16} /> Vazgeç</button><button type="button" className="primary-button" onClick={confirmImport}><CheckCircle2 size={17} /> Haritaya Ekle</button></div>
+        </Card>
+      )}
       <Card title="Proje Yönetimi" subtitle="Koordinatları kaydet ve yükle" icon={<FolderOpen size={19} />} tone="purple">
         <div className="inline-form"><input value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="Proje adı..." /><button type="button" className="primary-button small" onClick={save} disabled={!projectName.trim()}><Save size={16} /> Kaydet</button></div>
         {props.savedProjects.length ? (
@@ -464,33 +518,25 @@ function ImportPanel(props: BottomPanelProps) {
 function ExportPanel(props: BottomPanelProps) {
   const [filename, setFilename] = useState('evren-jeofizik-projesi')
   const [csvFormat, setCsvFormat] = useState<CoordinateFormat>('latlon')
+  const [reportProject, setReportProject] = useState('Jeofizik Saha Projesi')
+  const [reportClient, setReportClient] = useState('')
+  const [reportLocation, setReportLocation] = useState('')
+  const [reportNotes, setReportNotes] = useState('')
+  const [includeMap, setIncludeMap] = useState(true)
+  const [reportBusy, setReportBusy] = useState(false)
   const totalPoints = props.polygons.reduce((sum, layer) => sum + layer.points.length, 0)
   const safeName = filename.trim().replace(/[^a-zA-Z0-9ğüşöçıİĞÜŞÖÇ_-]+/g, '-') || 'evren-jeofizik-projesi'
 
   const exportPdf = async () => {
-    const { jsPDF } = await import('jspdf')
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(18)
-    pdf.text('EVREN JEOFIZIK HIZMETLERI', 16, 18)
-    pdf.setFontSize(10)
-    pdf.setFont('helvetica', 'normal')
-    pdf.text(`Saha Koordinat ve Poligon Raporu · ${new Date().toLocaleDateString('tr-TR')}`, 16, 25)
-    let y = 36
-    props.polygons.forEach((layer) => {
-      const analysis = analyzePolygon(layer.points)
-      if (y > 265) { pdf.addPage(); y = 20 }
-      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(12); pdf.text(layer.name, 16, y); y += 7
-      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9)
-      pdf.text(`Nokta: ${layer.points.length}   Alan: ${formatNumber(analysis.areaM2, 2)} m2   Cevre: ${formatNumber(analysis.perimeterM, 2)} m`, 16, y); y += 6
-      layer.points.forEach((point, index) => {
-        if (y > 280) { pdf.addPage(); y = 20 }
-        pdf.text(`${index + 1}.  ${point.lat.toFixed(7)}, ${point.lng.toFixed(7)}   ${formatPoint(point, 'utm')}`, 18, y)
-        y += 5
-      })
-      y += 5
-    })
-    pdf.save(`${safeName}-rapor.pdf`)
+    setReportBusy(true)
+    try {
+      await exportProjectPdf({ polygons: props.polygons, filename: safeName, metadata: { projectName: reportProject, client: reportClient, location: reportLocation, notes: reportNotes }, includeMap })
+      props.onMessage('Gelişmiş PDF raporu hazırlandı.', 'success')
+    } catch {
+      props.onMessage('PDF raporu hazırlanamadı.', 'error')
+    } finally {
+      setReportBusy(false)
+    }
   }
 
   return (
@@ -506,8 +552,12 @@ function ExportPanel(props: BottomPanelProps) {
         </div>
         {!totalPoints && <p className="form-note warning">Dışa aktarmak için koordinat ekleyin.</p>}
       </Card>
-      <Card title="PDF Raporu" subtitle={`${props.polygons.length} poligon · ${totalPoints} nokta · Alan + çevre özeti`} icon={<FileSearch size={19} />} tone="amber">
-        <button type="button" className="primary-button amber" onClick={exportPdf} disabled={!totalPoints}><FileDown size={18} /> PDF Raporu İndir</button>
+      <Card title="Gelişmiş PDF Raporu" subtitle="Harita, proje bilgileri, koordinat ve kenar tabloları" icon={<FileSearch size={19} />} tone="amber">
+        <Field label="Proje adı"><input value={reportProject} onChange={(event) => setReportProject(event.target.value)} placeholder="Jeofizik Saha Projesi" /></Field>
+        <div className="form-grid two"><Field label="Müşteri"><input value={reportClient} onChange={(event) => setReportClient(event.target.value)} placeholder="Müşteri / kurum" /></Field><Field label="Konum"><input value={reportLocation} onChange={(event) => setReportLocation(event.target.value)} placeholder="İl, ilçe, saha" /></Field></div>
+        <Field label="Rapor notu"><textarea rows={3} value={reportNotes} onChange={(event) => setReportNotes(event.target.value)} placeholder="Çalışma amacı ve saha notları…" /></Field>
+        <label className="check-row"><input type="checkbox" checked={includeMap} onChange={(event) => setIncludeMap(event.target.checked)} /><span><strong>Harita görüntüsünü ekle</strong><small>Mevcut harita görünümü rapor kapağına yerleştirilir.</small></span></label>
+        <button type="button" className={`primary-button amber${reportBusy ? ' is-busy' : ''}`} onClick={exportPdf} disabled={!totalPoints || reportBusy}><FileDown size={18} /> {reportBusy ? 'Rapor Hazırlanıyor…' : 'Gelişmiş PDF İndir'}</button>
         {!totalPoints && <p className="form-note">Rapor için koordinat ekleyin.</p>}
       </Card>
     </div>

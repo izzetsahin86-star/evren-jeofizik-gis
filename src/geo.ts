@@ -13,6 +13,11 @@ import type { AnalysisResult, CoordinateFormat, GeoPoint, PolygonLayer } from '.
 
 export const MAP_CENTER: [number, number] = [39.9255, 32.8663]
 export const POLYGON_COLORS = ['#1597e5', '#7c3aed', '#f59e0b', '#10b981', '#ef4444', '#ec4899']
+export const DEFAULT_POLYGON_APPEARANCE = {
+  strokeWidth: 3,
+  strokeOpacity: 1,
+  fillOpacity: 0.14,
+}
 
 export function uid(prefix = 'id') {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -203,7 +208,14 @@ export function polygonsToGeoJson(polygons: PolygonLayer[]) {
     type: 'FeatureCollection',
     features: polygons.filter((layer) => layer.points.length).map((layer) => ({
       type: 'Feature',
-      properties: { id: layer.id, name: layer.name, color: layer.color },
+      properties: {
+        id: layer.id,
+        name: layer.name,
+        color: layer.color,
+        strokeWidth: layer.strokeWidth ?? DEFAULT_POLYGON_APPEARANCE.strokeWidth,
+        strokeOpacity: layer.strokeOpacity ?? DEFAULT_POLYGON_APPEARANCE.strokeOpacity,
+        fillOpacity: layer.fillOpacity ?? DEFAULT_POLYGON_APPEARANCE.fillOpacity,
+      },
       geometry: layer.points.length >= 3
         ? { type: 'Polygon', coordinates: [[...layer.points.map((p) => [p.lng, p.lat]), [layer.points[0].lng, layer.points[0].lat]]] }
         : { type: 'LineString', coordinates: layer.points.map((p) => [p.lng, p.lat]) },
@@ -236,6 +248,7 @@ export function parseKml(text: string): PolygonLayer[] {
       id: uid('polygon'),
       name: placemark.querySelector('name')?.textContent?.trim() || `İçe Aktarılan ${index + 1}`,
       color: POLYGON_COLORS[layers.length % POLYGON_COLORS.length],
+      ...DEFAULT_POLYGON_APPEARANCE,
       points,
       desPoints: [],
     })
@@ -257,10 +270,90 @@ export function parseGeoJson(text: string): PolygonLayer[] {
       id: uid('polygon'),
       name: feature.properties?.name || `GeoJSON ${index + 1}`,
       color: feature.properties?.color || POLYGON_COLORS[index % POLYGON_COLORS.length],
+      strokeWidth: Number(feature.properties?.strokeWidth) || DEFAULT_POLYGON_APPEARANCE.strokeWidth,
+      strokeOpacity: Number.isFinite(Number(feature.properties?.strokeOpacity)) ? Number(feature.properties.strokeOpacity) : DEFAULT_POLYGON_APPEARANCE.strokeOpacity,
+      fillOpacity: Number.isFinite(Number(feature.properties?.fillOpacity)) ? Number(feature.properties.fillOpacity) : DEFAULT_POLYGON_APPEARANCE.fillOpacity,
       points,
       desPoints: [],
     }]
   })
+}
+
+function csvCells(line: string, delimiter: string) {
+  const cells: string[] = []
+  let value = ''
+  let quoted = false
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+    if (char === '"' && line[index + 1] === '"' && quoted) {
+      value += '"'
+      index += 1
+    } else if (char === '"') {
+      quoted = !quoted
+    } else if (char === delimiter && !quoted) {
+      cells.push(value.trim())
+      value = ''
+    } else {
+      value += char
+    }
+  }
+  cells.push(value.trim())
+  return cells
+}
+
+function headerIndex(headers: string[], aliases: string[]) {
+  return headers.findIndex((header) => aliases.some((alias) => header === alias || (alias.length > 2 && header.includes(alias))))
+}
+
+export function parseCsv(text: string, filename = 'CSV Katmanı'): PolygonLayer[] {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  if (lines.length < 2) return []
+  const delimiter = (lines[0].match(/;/g)?.length ?? 0) > (lines[0].match(/,/g)?.length ?? 0) ? ';' : ','
+  const headers = csvCells(lines[0], delimiter).map((header) => header.toLocaleLowerCase('tr-TR').replace(/[^a-z0-9ğüşöçı]/g, ''))
+  const latIndex = headerIndex(headers, ['latitude', 'lat', 'enlem'])
+  const lngIndex = headerIndex(headers, ['longitude', 'lon', 'lng', 'boylam'])
+  const eastIndex = headerIndex(headers, ['easting', 'east', 'x'])
+  const northIndex = headerIndex(headers, ['northing', 'north', 'y'])
+  const zoneIndex = headerIndex(headers, ['zone', 'zon'])
+  const hemisphereIndex = headerIndex(headers, ['hemisphere', 'yarımküre', 'yarimkure'])
+  const datumIndex = headerIndex(headers, ['datum'])
+  const nameIndex = headerIndex(headers, ['name', 'ad', 'nokta'])
+  const groupIndex = headerIndex(headers, ['polygon', 'poligon', 'layer', 'katman'])
+  const groups = new Map<string, GeoPoint[]>()
+
+  lines.slice(1).forEach((line) => {
+    const cells = csvCells(line, delimiter)
+    let point: Omit<GeoPoint, 'id'> | null = null
+    if (latIndex >= 0 && lngIndex >= 0) {
+      const lat = Number(cells[latIndex]?.replace(',', '.'))
+      const lng = Number(cells[lngIndex]?.replace(',', '.'))
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) point = { lat, lng }
+    } else if (eastIndex >= 0 && northIndex >= 0) {
+      const easting = Number(cells[eastIndex]?.replace(',', '.'))
+      const northing = Number(cells[northIndex]?.replace(',', '.'))
+      const zone = Number(cells[zoneIndex] || 36)
+      const hemisphere: 'N' | 'S' = cells[hemisphereIndex]?.toUpperCase().startsWith('S') ? 'S' : 'N'
+      if (Number.isFinite(easting) && Number.isFinite(northing)) point = fromUtm(easting, northing, zone, hemisphere, cells[datumIndex] || 'WGS84')
+    } else {
+      const lat = Number(cells[0]?.replace(',', '.'))
+      const lng = Number(cells[1]?.replace(',', '.'))
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) point = { lat, lng }
+    }
+    if (!point) return
+    const group = cells[groupIndex]?.trim() || filename.replace(/\.csv$/i, '') || 'CSV Katmanı'
+    const points = groups.get(group) ?? []
+    points.push({ ...point, id: uid('pt'), name: cells[nameIndex]?.trim() || undefined })
+    groups.set(group, points)
+  })
+
+  return Array.from(groups.entries()).map(([name, points], index) => ({
+    id: uid('polygon'),
+    name,
+    color: POLYGON_COLORS[index % POLYGON_COLORS.length],
+    ...DEFAULT_POLYGON_APPEARANCE,
+    points,
+    desPoints: [],
+  }))
 }
 
 export async function readSpatialFile(file: File) {
@@ -273,6 +366,7 @@ export async function readSpatialFile(file: File) {
     return parseKml(await kmlFile.async('text'))
   }
   const text = await file.text()
+  if (lower.endsWith('.csv')) return parseCsv(text, file.name)
   return lower.endsWith('.geojson') || lower.endsWith('.json') ? parseGeoJson(text) : parseKml(text)
 }
 

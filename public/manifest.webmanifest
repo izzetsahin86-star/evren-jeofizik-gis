@@ -1,0 +1,19 @@
+{
+  "name": "Evren Jeofizik GIS",
+  "short_name": "Evren GIS",
+  "description": "Saha koordinat, poligon, DES ve jeofizik planlama uygulaması",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eef4f8",
+  "theme_color": "#2189e8",
+  "lang": "tr",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/evren-gis.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

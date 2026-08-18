@@ -154,7 +154,7 @@ function CoordinateCard({ positionListener, areaM2 }: CoordinateCardProps) {
           <span className="coordinate-geographic">{formatted.geographic}</span>
           <span className="coordinate-utm">{formatted.utm}</span>
         </span>
-        <span className="coordinate-copy-state" aria-hidden="true">{copied ? <Check size={16} /> : <Copy size={16} />}</span>
+        <span className="coordinate-copy-state" aria-hidden="true">{copied ? <Check size={14} /> : <Copy size={14} />}</span>
       </button>
       {areaM2 > 0 && <span className="coordinate-area">{formatAreaShort(areaM2)} alan</span>}
     </div>

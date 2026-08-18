@@ -3,7 +3,7 @@ import L, { type LeafletMouseEvent, type Map as LeafletMap } from 'leaflet'
 import { Circle, CircleMarker, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, useMapEvents } from 'react-leaflet'
 import { Check, Copy, Crosshair, LocateFixed, MousePointer2, Ruler, Trash2, Undo2 } from 'lucide-react'
 import { analyzePolygon, formatAreaShort, formatNumber, MAP_CENTER, pointBearing, pointDistance, toUtm, utmLatitudeBand } from '../geo'
-import type { BaseLayerId, GeoPoint, PolygonLayer } from '../types'
+import type { BaseLayerId, DisplaySettings, GeoPoint, PolygonLayer } from '../types'
 
 const tileLayers: Record<BaseLayerId, { url: string; attribution: string }> = {
   street: {
@@ -111,9 +111,11 @@ function EventBridge({ addMode, measureMode, onAddPoint, onMeasurePoint, positio
 interface CoordinateCardProps {
   positionListener: MutableRefObject<(point: MapPosition) => void>
   areaM2: number
+  showCoordinate: boolean
+  showArea: boolean
 }
 
-function CoordinateCard({ positionListener, areaM2 }: CoordinateCardProps) {
+function CoordinateCard({ positionListener, areaM2, showCoordinate, showArea }: CoordinateCardProps) {
   const [position, setPosition] = useState<MapPosition>({ lat: MAP_CENTER[0], lng: MAP_CENTER[1] })
   const [copied, setCopied] = useState(false)
   const formatted = useMemo(() => {
@@ -149,14 +151,16 @@ function CoordinateCard({ positionListener, areaM2 }: CoordinateCardProps) {
 
   return (
     <div className="coordinate-stack">
-      <button type="button" className="coordinate-card" onClick={copyCoordinate} title="Tüm koordinatları kopyala" aria-label={`${formatted.geographic}, UTM ${formatted.utm}. Tüm koordinatları kopyala`}>
-        <span className="coordinate-lines">
-          <span className="coordinate-geographic">{formatted.geographic}</span>
-          <span className="coordinate-utm">{formatted.utm}</span>
-        </span>
-        <span className="coordinate-copy-state" aria-hidden="true">{copied ? <Check size={14} /> : <Copy size={14} />}</span>
-      </button>
-      {areaM2 > 0 && <span className="coordinate-area">{formatAreaShort(areaM2)} alan</span>}
+      {showCoordinate && (
+        <button type="button" className="coordinate-card" onClick={copyCoordinate} title="Tüm koordinatları kopyala" aria-label={`${formatted.geographic}, UTM ${formatted.utm}. Tüm koordinatları kopyala`}>
+          <span className="coordinate-lines">
+            <span className="coordinate-geographic">{formatted.geographic}</span>
+            <span className="coordinate-utm">{formatted.utm}</span>
+          </span>
+          <span className="coordinate-copy-state" aria-hidden="true">{copied ? <Check size={14} /> : <Copy size={14} />}</span>
+        </button>
+      )}
+      {showArea && areaM2 > 0 && <span className="coordinate-area">{formatAreaShort(areaM2)} alan</span>}
     </div>
   )
 }
@@ -244,6 +248,8 @@ interface MapWorkspaceProps {
   addMode: boolean
   panelOpen: boolean
   performanceMode: boolean
+  displaySettings: DisplaySettings
+  clearRequest: number
   fitRequest: number
   flyTarget: { lat: number; lng: number; zoom?: number } | null
   onToggleAddMode: () => void
@@ -260,6 +266,8 @@ export default function MapWorkspace({
   addMode,
   panelOpen,
   performanceMode,
+  displaySettings,
+  clearRequest,
   fitRequest,
   flyTarget,
   onToggleAddMode,
@@ -292,6 +300,13 @@ export default function MapWorkspace({
     if (!flyTarget || !mapRef.current) return
     mapRef.current.flyTo([flyTarget.lat, flyTarget.lng], flyTarget.zoom ?? 16, { duration: 0.8 })
   }, [flyTarget])
+
+  useEffect(() => {
+    if (!clearRequest) return
+    setMeasureMode(false)
+    setMeasurePoints([])
+    setGpsPosition(null)
+  }, [clearRequest])
 
   useEffect(() => {
     if (!fitRequest || fitRequest === lastFitRequest.current || !mapRef.current || !active?.points.length) return
@@ -335,7 +350,7 @@ export default function MapWorkspace({
   }
 
   return (
-    <main className={`map-shell${addMode ? ' add-mode' : ''}${measureMode ? ' measure-mode' : ''}${performanceMode ? ' performance-mode' : ''}`} aria-label="Jeofizik çalışma haritası">
+    <main className={`map-shell card-size-${displaySettings.cardSize}${addMode ? ' add-mode' : ''}${measureMode ? ' measure-mode' : ''}${performanceMode ? ' performance-mode' : ''}`} aria-label="Jeofizik çalışma haritası">
       <MapContainer center={MAP_CENTER} zoom={6} zoomControl={false} attributionControl preferCanvas ref={mapRef} className="map-canvas">
         <TileLayer key={baseLayer} url={tileLayers[baseLayer].url} attribution={tileLayers[baseLayer].attribution} />
         <EventBridge addMode={addMode} measureMode={measureMode} onAddPoint={onAddPoint} onMeasurePoint={(point) => setMeasurePoints((current) => [...current, point])} positionListener={positionListener} />
@@ -353,15 +368,17 @@ export default function MapWorkspace({
         )}
       </MapContainer>
 
-      <CoordinateCard positionListener={positionListener} areaM2={analysis.areaM2} />
+      <CoordinateCard positionListener={positionListener} areaM2={analysis.areaM2} showCoordinate={displaySettings.coordinateCard} showArea={displaySettings.areaCard} />
 
-      <div className="map-mode-actions">
-        <button type="button" className={addMode ? 'is-active' : ''} onClick={() => { if (measureMode) setMeasureMode(false); onToggleAddMode() }}><MousePointer2 size={17} /> {addMode ? 'Haritaya Tıklayın' : 'Tıkla & Ekle'}</button>
-        <button type="button" onClick={addTargetPoint}><Crosshair size={17} /> Hedeften Ekle</button>
-        <button type="button" className={measureMode ? 'is-measuring' : ''} onClick={toggleMeasurement}><Ruler size={17} /> {measureMode ? 'Ölçüm Açık' : 'Serbest Ölç'}</button>
-      </div>
+      {displaySettings.mapActions && (
+        <div className="map-mode-actions">
+          <button type="button" className={addMode ? 'is-active' : ''} onClick={() => { if (measureMode) setMeasureMode(false); onToggleAddMode() }}><MousePointer2 size={17} /> {addMode ? 'Haritaya Tıklayın' : 'Tıkla & Ekle'}</button>
+          <button type="button" onClick={addTargetPoint}><Crosshair size={17} /> Hedeften Ekle</button>
+          <button type="button" className={measureMode ? 'is-measuring' : ''} onClick={toggleMeasurement}><Ruler size={17} /> {measureMode ? 'Ölçüm Açık' : 'Serbest Ölç'}</button>
+        </div>
+      )}
 
-      {measureMode && (
+      {displaySettings.measurementCard && measureMode && (
         <section className="measurement-card" aria-live="polite">
           <header><span><Ruler size={16} /> Serbest Ölçüm</span><strong>{measurePoints.length} nokta</strong></header>
           <div><span><small>Mesafe</small><strong>{formatNumber(measurement.distanceM, 2)} m</strong></span><span><small>Son Azimut</small><strong>{measurement.bearing === null ? '—' : `${formatNumber(measurement.bearing, 2)}°`}</strong></span>{measurePoints.length >= 3 && <span><small>Alan</small><strong>{formatAreaShort(measurement.areaM2)}</strong></span>}</div>
@@ -369,8 +386,12 @@ export default function MapWorkspace({
         </section>
       )}
 
-      <button type="button" className={`locate-button${gpsPosition ? ' has-fix' : ''}`} onClick={locate} aria-label="Mevcut konumum"><LocateFixed size={22} /></button>
-      {gpsPosition && <span className="gps-accuracy">±{formatNumber(gpsPosition.accuracy, 0)} m</span>}
+      {displaySettings.locationCard && (
+        <>
+          <button type="button" className={`locate-button${gpsPosition ? ' has-fix' : ''}`} onClick={locate} aria-label="Mevcut konumum"><LocateFixed size={22} /></button>
+          {gpsPosition && <span className="gps-accuracy">±{formatNumber(gpsPosition.accuracy, 0)} m</span>}
+        </>
+      )}
       <div className="map-crosshair" aria-hidden="true"><Crosshair size={24} strokeWidth={1.4} /></div>
     </main>
   )

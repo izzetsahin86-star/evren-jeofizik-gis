@@ -11,11 +11,22 @@ import BottomPanel from './components/BottomPanel'
 import MapWorkspace from './components/MapWorkspace'
 import { dockItems } from './dock'
 import { DEFAULT_POLYGON_APPEARANCE, POLYGON_COLORS, analyzePolygon, formatAreaShort, uid } from './geo'
-import type { BaseLayerId, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer, SavedProject } from './types'
+import type { BaseLayerId, DisplaySettings, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer, SavedProject } from './types'
 
 const WORKSPACE_KEY = 'evren-jeofizik-gis-workspace-v1'
 const PROJECTS_KEY = 'evren-jeofizik-gis-projects-v1'
 const PERFORMANCE_KEY = 'evren-jeofizik-gis-performance-v1'
+const DISPLAY_KEY = 'evren-jeofizik-gis-display-v1'
+
+const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
+  coordinateCard: true,
+  areaCard: true,
+  mapActions: true,
+  measurementCard: true,
+  locationCard: true,
+  headerStats: true,
+  cardSize: 'small',
+}
 
 function createPolygon(index = 0): PolygonLayer {
   return {
@@ -56,6 +67,23 @@ function readProjects() {
   } catch { return [] }
 }
 
+function readDisplaySettings(): DisplaySettings {
+  try {
+    const value = JSON.parse(localStorage.getItem(DISPLAY_KEY) || '{}') as Partial<DisplaySettings>
+    return {
+      coordinateCard: typeof value.coordinateCard === 'boolean' ? value.coordinateCard : DEFAULT_DISPLAY_SETTINGS.coordinateCard,
+      areaCard: typeof value.areaCard === 'boolean' ? value.areaCard : DEFAULT_DISPLAY_SETTINGS.areaCard,
+      mapActions: typeof value.mapActions === 'boolean' ? value.mapActions : DEFAULT_DISPLAY_SETTINGS.mapActions,
+      measurementCard: typeof value.measurementCard === 'boolean' ? value.measurementCard : DEFAULT_DISPLAY_SETTINGS.measurementCard,
+      locationCard: typeof value.locationCard === 'boolean' ? value.locationCard : DEFAULT_DISPLAY_SETTINGS.locationCard,
+      headerStats: typeof value.headerStats === 'boolean' ? value.headerStats : DEFAULT_DISPLAY_SETTINGS.headerStats,
+      cardSize: value.cardSize === 'medium' || value.cardSize === 'large' ? value.cardSize : 'small',
+    }
+  } catch {
+    return DEFAULT_DISPLAY_SETTINGS
+  }
+}
+
 function clonePolygons(polygons: PolygonLayer[]) {
   return structuredClone(polygons)
 }
@@ -73,6 +101,8 @@ export default function App() {
     const saved = localStorage.getItem(PERFORMANCE_KEY)
     return saved === 'on' || saved === 'off' ? saved : 'auto'
   })
+  const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(readDisplaySettings)
+  const [clearRequest, setClearRequest] = useState(0)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [toast, setToast] = useState<{ id: string; message: string; tone: 'success' | 'error' | 'info' } | null>(null)
   const undoStack = useRef<PolygonLayer[][]>([])
@@ -95,6 +125,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(PERFORMANCE_KEY, performanceMode)
   }, [performanceMode])
+
+  useEffect(() => {
+    localStorage.setItem(DISPLAY_KEY, JSON.stringify(displaySettings))
+  }, [displaySettings])
 
   useEffect(() => {
     const updateConnection = () => setIsOnline(navigator.onLine)
@@ -205,6 +239,21 @@ export default function App() {
     message('Çalışma düzeni sıfırlandı.', 'success')
   }
 
+  const clearAllData = () => {
+    const blank = createPolygon()
+    localStorage.removeItem(WORKSPACE_KEY)
+    localStorage.removeItem(PROJECTS_KEY)
+    setPolygonsState([blank])
+    setActiveId(blank.id)
+    setSavedProjects([])
+    setAddMode(false)
+    setFlyTarget(null)
+    undoStack.current = []
+    redoStack.current = []
+    setClearRequest((value) => value + 1)
+    message('Tüm harita verileri ve kayıtlı projeler silindi.', 'success')
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -213,10 +262,14 @@ export default function App() {
           <strong>Evren Jeofizik <span>GIS</span></strong>
         </div>
         <div className="header-actions">
-          <span className="stat-pill violet">{polygons.length} pol</span>
-          <span className="stat-pill blue">{totalPoints} pkt</span>
-          {activeAnalysis.areaM2 > 0 && <span className="stat-pill green">{formatAreaShort(activeAnalysis.areaM2)}</span>}
-          <i className="header-divider" />
+          {displaySettings.headerStats && (
+            <>
+              <span className="stat-pill violet">{polygons.length} pol</span>
+              <span className="stat-pill blue">{totalPoints} pkt</span>
+              {activeAnalysis.areaM2 > 0 && <span className="stat-pill green">{formatAreaShort(activeAnalysis.areaM2)}</span>}
+              <i className="header-divider" />
+            </>
+          )}
           <button type="button" onClick={undo} disabled={!undoStack.current.length} aria-label="Geri al"><Undo2 size={17} /></button>
           <button type="button" onClick={redo} disabled={!redoStack.current.length} aria-label="Yinele"><Redo2 size={17} /></button>
           <button type="button" onClick={resetWorkspace} aria-label="Düzeni sıfırla" title="Düzeni sıfırla"><Move size={17} /></button>
@@ -240,6 +293,8 @@ export default function App() {
         addMode={addMode}
         panelOpen={Boolean(activePanel)}
         performanceMode={performanceActive}
+        displaySettings={displaySettings}
+        clearRequest={clearRequest}
         fitRequest={fitRequest}
         flyTarget={flyTarget}
         onToggleAddMode={() => setAddMode((value) => !value)}
@@ -258,6 +313,7 @@ export default function App() {
           savedProjects={savedProjects}
           performanceMode={performanceMode}
           performanceActive={performanceActive}
+          displaySettings={displaySettings}
           isOnline={isOnline}
           onClose={() => setActivePanel(null)}
           onSetBaseLayer={setBaseLayer}
@@ -267,6 +323,8 @@ export default function App() {
           onCycleColor={(id) => updatePolygons((current) => current.map((layer) => layer.id === id ? { ...layer, color: POLYGON_COLORS[(POLYGON_COLORS.indexOf(layer.color) + 1) % POLYGON_COLORS.length] } : layer))}
           onSetPolygonStyle={(id, appearance: Partial<PolygonAppearance>) => setPolygonsState((current) => current.map((layer) => layer.id === id ? { ...layer, ...appearance } : layer))}
           onSetPerformanceMode={setPerformanceMode}
+          onSetDisplaySettings={setDisplaySettings}
+          onClearAllData={clearAllData}
           onDeletePolygon={deletePolygon}
           onDuplicatePolygon={duplicatePolygon}
           onAddPoints={addPoints}

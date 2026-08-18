@@ -8,6 +8,8 @@ import {
   CircleDot,
   Copy,
   Download,
+  Eye,
+  EyeOff,
   FileDown,
   FileSearch,
   FileUp,
@@ -49,7 +51,7 @@ import {
   toUtm,
 } from '../geo'
 import { exportProjectPdf } from '../report'
-import type { BaseLayerId, CoordinateFormat, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer, SavedProject } from '../types'
+import type { BaseLayerId, CoordinateFormat, DisplaySettings, GeoPoint, MapCardSize, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer, SavedProject } from '../types'
 import { Card, EmptyState, Field, Segmented } from './PanelUi'
 
 const coordinateOptions: Array<{ value: CoordinateFormat; label: string }> = [
@@ -65,7 +67,19 @@ const panelTitles: Record<PanelId, string> = {
   tools: 'Araçlar',
   import: 'İçe Aktar',
   export: 'Dışa Aktar',
+  settings: 'Ayarla',
 }
+
+type VisibilitySetting = Exclude<keyof DisplaySettings, 'cardSize'>
+
+const visibilityOptions: Array<{ key: VisibilitySetting; label: string; description: string }> = [
+  { key: 'coordinateCard', label: 'Koordinat kartı', description: 'Enlem, boylam ve UTM bilgisi' },
+  { key: 'areaCard', label: 'Alan kartı', description: 'Aktif poligonun hesaplanan alanı' },
+  { key: 'mapActions', label: 'Harita işlem kartları', description: 'Tıkla, hedeften ekle ve serbest ölç' },
+  { key: 'measurementCard', label: 'Ölçüm kartı', description: 'Mesafe, azimut ve alan sonuçları' },
+  { key: 'locationCard', label: 'Konum kartı', description: 'GPS düğmesi ve konum hassasiyeti' },
+  { key: 'headerStats', label: 'Üst durum kartları', description: 'Poligon, nokta ve alan sayaçları' },
+]
 
 interface BottomPanelProps {
   panel: PanelId
@@ -75,6 +89,7 @@ interface BottomPanelProps {
   savedProjects: SavedProject[]
   performanceMode: PerformanceMode
   performanceActive: boolean
+  displaySettings: DisplaySettings
   isOnline: boolean
   onClose: () => void
   onSetBaseLayer: (layer: BaseLayerId) => void
@@ -84,6 +99,8 @@ interface BottomPanelProps {
   onCycleColor: (id: string) => void
   onSetPolygonStyle: (id: string, appearance: Partial<PolygonAppearance>) => void
   onSetPerformanceMode: (mode: PerformanceMode) => void
+  onSetDisplaySettings: (settings: DisplaySettings) => void
+  onClearAllData: () => void
   onDeletePolygon: (id: string) => void
   onDuplicatePolygon: (id: string) => void
   onAddPoints: (points: Array<Omit<GeoPoint, 'id'>>) => void
@@ -564,6 +581,79 @@ function ExportPanel(props: BottomPanelProps) {
   )
 }
 
+function SettingsPanel(props: BottomPanelProps) {
+  const [confirmingClear, setConfirmingClear] = useState(false)
+
+  const setAllCards = (visible: boolean) => {
+    props.onSetDisplaySettings({
+      ...props.displaySettings,
+      coordinateCard: visible,
+      areaCard: visible,
+      mapActions: visible,
+      measurementCard: visible,
+      locationCard: visible,
+      headerStats: visible,
+    })
+  }
+
+  const clearAllData = () => {
+    props.onClearAllData()
+    setConfirmingClear(false)
+  }
+
+  return (
+    <div className="panel-stack">
+      <Card title="Ekran Kartları" subtitle="Haritada görmek istediklerinizi seçin" icon={<Eye size={19} />} tone="green">
+        <div className="settings-quick-actions">
+          <button type="button" onClick={() => setAllCards(true)}><Eye size={16} /> Tümünü Göster</button>
+          <button type="button" onClick={() => setAllCards(false)}><EyeOff size={16} /> Tümünü Gizle</button>
+        </div>
+        <div className="settings-toggle-list">
+          {visibilityOptions.map((option) => (
+            <label key={option.key} className="setting-toggle">
+              <span><strong>{option.label}</strong><small>{option.description}</small></span>
+              <input
+                type="checkbox"
+                checked={props.displaySettings[option.key]}
+                onChange={(event) => props.onSetDisplaySettings({ ...props.displaySettings, [option.key]: event.target.checked })}
+              />
+            </label>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Kart Boyutu" subtitle="Harita üzerindeki kartların ölçeği" icon={<SlidersHorizontal size={19} />} tone="purple">
+        <Segmented<MapCardSize>
+          value={props.displaySettings.cardSize}
+          ariaLabel="Harita kartlarının boyutu"
+          options={[
+            { value: 'small', label: 'Küçük' },
+            { value: 'medium', label: 'Orta' },
+            { value: 'large', label: 'Büyük' },
+          ]}
+          onChange={(cardSize) => props.onSetDisplaySettings({ ...props.displaySettings, cardSize })}
+        />
+        <p className="form-note">Boyut değişikliği koordinat, işlem, konum ve ölçüm kartlarına uygulanır.</p>
+      </Card>
+
+      <Card title="Tüm Verileri Sil" subtitle="Bu cihazdaki çalışma verilerini temizler" icon={<Trash2 size={19} />} tone="amber">
+        <p className="danger-zone-copy">Tüm poligonlar, koordinatlar, DES noktaları, ölçümler ve kayıtlı projeler kalıcı olarak silinir. Ekran ayarlarınız korunur.</p>
+        {!confirmingClear ? (
+          <button type="button" className="danger-button" onClick={() => setConfirmingClear(true)}><Trash2 size={17} /> Tüm Verileri Sil</button>
+        ) : (
+          <div className="danger-confirm" role="alert">
+            <span><AlertTriangle size={18} /><strong>Bu işlem geri alınamaz. Emin misiniz?</strong></span>
+            <div>
+              <button type="button" onClick={() => setConfirmingClear(false)}>Vazgeç</button>
+              <button type="button" className="confirm-delete" onClick={clearAllData}>Evet, Kalıcı Sil</button>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
 export default function BottomPanel(props: BottomPanelProps) {
   return (
     <aside className="workspace-panel" aria-label={panelTitles[props.panel]}>
@@ -574,6 +664,7 @@ export default function BottomPanel(props: BottomPanelProps) {
         {props.panel === 'tools' && <ToolsPanel {...props} />}
         {props.panel === 'import' && <ImportPanel {...props} />}
         {props.panel === 'export' && <ExportPanel {...props} />}
+        {props.panel === 'settings' && <SettingsPanel {...props} />}
       </div>
       <div className="panel-resize-cue"><ChevronDown size={15} /></div>
     </aside>

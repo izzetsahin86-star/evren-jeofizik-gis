@@ -1,7 +1,18 @@
 export type CoordinateFormat = 'utm' | 'latlon' | 'dms' | 'ddm'
 export type BaseLayerId = 'street' | 'satellite' | 'topographic'
-export type PanelId = 'layers' | 'coordinates' | 'tools' | 'import' | 'export'
+export type PanelId = 'layers' | 'coordinates' | 'tools' | 'import' | 'export' | 'settings'
 export type PerformanceMode = 'auto' | 'on' | 'off'
+export type MapCardSize = 'small' | 'medium' | 'large'
+
+export interface DisplaySettings {
+  coordinateCard: boolean
+  areaCard: boolean
+  mapActions: boolean
+  measurementCard: boolean
+  locationCard: boolean
+  headerStats: boolean
+  cardSize: MapCardSize
+}
 
 export interface GeoPoint {
   id: string

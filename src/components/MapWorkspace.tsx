@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from 'react'
 import L, { type LeafletMouseEvent, type Map as LeafletMap } from 'leaflet'
 import { Circle, CircleMarker, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, useMapEvents } from 'react-leaflet'
 import { Check, Copy, Crosshair, LocateFixed, MousePointer2, Ruler, Trash2, Undo2 } from 'lucide-react'
@@ -160,7 +160,7 @@ function CoordinateCard({ positionListener, areaM2, showCoordinate, showArea }: 
           <span className="coordinate-copy-state" aria-hidden="true">{copied ? <Check size={14} /> : <Copy size={14} />}</span>
         </button>
       )}
-      {showArea && areaM2 > 0 && <span className="coordinate-area">{formatAreaShort(areaM2)} alan</span>}
+      {showArea && areaM2 > 0 && <span className="coordinate-area">{formatNumber(areaM2 / 10_000, 3)} ha alan</span>}
     </div>
   )
 }
@@ -350,7 +350,12 @@ export default function MapWorkspace({
   }
 
   return (
-    <main className={`map-shell card-size-${displaySettings.cardSize}${addMode ? ' add-mode' : ''}${measureMode ? ' measure-mode' : ''}${performanceMode ? ' performance-mode' : ''}`} aria-label="Jeofizik çalışma haritası">
+    <main
+      className={`map-shell${addMode ? ' add-mode' : ''}${measureMode ? ' measure-mode' : ''}${performanceMode ? ' performance-mode' : ''}`}
+      style={{ '--card-scale': displaySettings.cardScale / 100 } as CSSProperties}
+      data-card-scale={displaySettings.cardScale}
+      aria-label="Jeofizik çalışma haritası"
+    >
       <MapContainer center={MAP_CENTER} zoom={6} zoomControl={false} attributionControl preferCanvas ref={mapRef} className="map-canvas">
         <TileLayer key={baseLayer} url={tileLayers[baseLayer].url} attribution={tileLayers[baseLayer].attribution} />
         <EventBridge addMode={addMode} measureMode={measureMode} onAddPoint={onAddPoint} onMeasurePoint={(point) => setMeasurePoints((current) => [...current, point])} positionListener={positionListener} />
@@ -387,10 +392,10 @@ export default function MapWorkspace({
       )}
 
       {displaySettings.locationCard && (
-        <>
+        <div className="location-controls">
           <button type="button" className={`locate-button${gpsPosition ? ' has-fix' : ''}`} onClick={locate} aria-label="Mevcut konumum"><LocateFixed size={22} /></button>
           {gpsPosition && <span className="gps-accuracy">±{formatNumber(gpsPosition.accuracy, 0)} m</span>}
-        </>
+        </div>
       )}
       <div className="map-crosshair" aria-hidden="true"><Crosshair size={24} strokeWidth={1.4} /></div>
     </main>

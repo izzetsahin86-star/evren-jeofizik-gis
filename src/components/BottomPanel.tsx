@@ -13,7 +13,6 @@ import {
   FileDown,
   FileSearch,
   FileUp,
-  FolderOpen,
   Gauge,
   Grid3X3,
   Layers3,
@@ -21,7 +20,6 @@ import {
   Navigation,
   Palette,
   Plus,
-  Save,
   Search,
   SlidersHorizontal,
   Sparkles,
@@ -51,7 +49,7 @@ import {
   toUtm,
 } from '../geo'
 import { exportProjectPdf } from '../report'
-import type { BaseLayerId, CoordinateFormat, DisplaySettings, GeoPoint, MapCardSize, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer, SavedProject } from '../types'
+import type { BaseLayerId, CoordinateFormat, DisplaySettings, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer } from '../types'
 import { Card, EmptyState, Field, Segmented } from './PanelUi'
 
 const coordinateOptions: Array<{ value: CoordinateFormat; label: string }> = [
@@ -70,7 +68,7 @@ const panelTitles: Record<PanelId, string> = {
   settings: 'Ayarla',
 }
 
-type VisibilitySetting = Exclude<keyof DisplaySettings, 'cardSize'>
+type VisibilitySetting = Exclude<keyof DisplaySettings, 'cardScale'>
 
 const visibilityOptions: Array<{ key: VisibilitySetting; label: string; description: string }> = [
   { key: 'coordinateCard', label: 'Koordinat kartı', description: 'Enlem, boylam ve UTM bilgisi' },
@@ -86,7 +84,6 @@ interface BottomPanelProps {
   polygons: PolygonLayer[]
   activeId: string
   baseLayer: BaseLayerId
-  savedProjects: SavedProject[]
   performanceMode: PerformanceMode
   performanceActive: boolean
   displaySettings: DisplaySettings
@@ -108,9 +105,6 @@ interface BottomPanelProps {
   onClearPoints: () => void
   onSetDesPoints: (polygonId: string, points: GeoPoint[]) => void
   onImportLayers: (layers: PolygonLayer[]) => void
-  onLoadProject: (project: SavedProject) => void
-  onSaveProject: (name: string) => void
-  onDeleteProject: (id: string) => void
   onFitActive: () => void
   onFlyTo: (target: { lat: number; lng: number; zoom?: number }) => void
   onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
@@ -477,7 +471,6 @@ function ToolsPanel(props: BottomPanelProps) {
 }
 
 function ImportPanel(props: BottomPanelProps) {
-  const [projectName, setProjectName] = useState('')
   const [readingImport, setReadingImport] = useState(false)
   const [pendingImport, setPendingImport] = useState<{ name: string; size: number; layers: PolygonLayer[] } | null>(null)
   const importFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -503,12 +496,6 @@ function ImportPanel(props: BottomPanelProps) {
     props.onMessage(`${pendingImport.layers.length} katman haritaya eklendi.`, 'success')
     setPendingImport(null)
   }
-  const save = () => {
-    if (!projectName.trim()) return
-    props.onSaveProject(projectName.trim())
-    setProjectName('')
-    props.onMessage('Proje tarayıcıya kaydedildi.', 'success')
-  }
   return (
     <div className="panel-stack">
       <Card title="Mekânsal Veri İçe Aktar" subtitle="Önizle, kontrol et ve haritaya ekle" icon={<FileUp size={19} />} tone="green">
@@ -522,12 +509,6 @@ function ImportPanel(props: BottomPanelProps) {
           <div className="preview-actions"><button type="button" className="secondary-button" onClick={() => setPendingImport(null)}><X size={16} /> Vazgeç</button><button type="button" className="primary-button" onClick={confirmImport}><CheckCircle2 size={17} /> Haritaya Ekle</button></div>
         </Card>
       )}
-      <Card title="Proje Yönetimi" subtitle="Koordinatları kaydet ve yükle" icon={<FolderOpen size={19} />} tone="purple">
-        <div className="inline-form"><input value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="Proje adı..." /><button type="button" className="primary-button small" onClick={save} disabled={!projectName.trim()}><Save size={16} /> Kaydet</button></div>
-        {props.savedProjects.length ? (
-          <div className="project-list">{props.savedProjects.map((project) => <div key={project.id}><span><strong>{project.name}</strong><small>{new Date(project.savedAt).toLocaleString('tr-TR')} · {project.polygons.length} poligon</small></span><button type="button" onClick={() => props.onLoadProject(project)}><FolderOpen size={16} /> Aç</button><button type="button" onClick={() => props.onDeleteProject(project.id)} aria-label="Projeyi sil"><Trash2 size={16} /></button></div>)}</div>
-        ) : <EmptyState><FolderOpen size={28} /><span>Henüz kayıtlı proje yok</span></EmptyState>}
-      </Card>
     </div>
   )
 }
@@ -622,22 +603,28 @@ function SettingsPanel(props: BottomPanelProps) {
         </div>
       </Card>
 
-      <Card title="Kart Boyutu" subtitle="Harita üzerindeki kartların ölçeği" icon={<SlidersHorizontal size={19} />} tone="purple">
-        <Segmented<MapCardSize>
-          value={props.displaySettings.cardSize}
-          ariaLabel="Harita kartlarının boyutu"
-          options={[
-            { value: 'small', label: 'Küçük' },
-            { value: 'medium', label: 'Orta' },
-            { value: 'large', label: 'Büyük' },
-          ]}
-          onChange={(cardSize) => props.onSetDisplaySettings({ ...props.displaySettings, cardSize })}
-        />
-        <p className="form-note">Boyut değişikliği koordinat, işlem, konum ve ölçüm kartlarına uygulanır.</p>
+      <Card title="Kart Ölçeği" subtitle="Harita kartlarını yüzde olarak ayarlayın" icon={<SlidersHorizontal size={19} />} tone="purple">
+        <div className="card-scale-control">
+          <div className="card-scale-heading"><span>Ölçek</span><output>{props.displaySettings.cardScale}%</output></div>
+          <input
+            className="card-scale-range"
+            type="range"
+            min="70"
+            max="160"
+            step="5"
+            value={props.displaySettings.cardScale}
+            aria-label="Harita kartı ölçeği"
+            aria-valuetext={`${props.displaySettings.cardScale}%`}
+            onChange={(event) => props.onSetDisplaySettings({ ...props.displaySettings, cardScale: Number(event.target.value) })}
+          />
+          <div className="card-scale-marks" aria-hidden="true"><span>70%</span><span>100%</span><span>130%</span><span>160%</span></div>
+          <button type="button" className="scale-reset-button" disabled={props.displaySettings.cardScale === 100} onClick={() => props.onSetDisplaySettings({ ...props.displaySettings, cardScale: 100 })}>Ölçeği %100 yap</button>
+        </div>
+        <p className="form-note">Koordinat, alan, işlem, konum ve ölçüm kartları aynı oranda büyür veya küçülür.</p>
       </Card>
 
       <Card title="Tüm Verileri Sil" subtitle="Bu cihazdaki çalışma verilerini temizler" icon={<Trash2 size={19} />} tone="amber">
-        <p className="danger-zone-copy">Tüm poligonlar, koordinatlar, DES noktaları, ölçümler ve kayıtlı projeler kalıcı olarak silinir. Ekran ayarlarınız korunur.</p>
+        <p className="danger-zone-copy">Tüm poligonlar, koordinatlar, DES noktaları ve ölçümler kalıcı olarak silinir. Ekran ayarlarınız korunur.</p>
         {!confirmingClear ? (
           <button type="button" className="danger-button" onClick={() => setConfirmingClear(true)}><Trash2 size={17} /> Tüm Verileri Sil</button>
         ) : (

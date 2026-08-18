@@ -11,12 +11,15 @@ import BottomPanel from './components/BottomPanel'
 import MapWorkspace from './components/MapWorkspace'
 import { dockItems } from './dock'
 import { DEFAULT_POLYGON_APPEARANCE, POLYGON_COLORS, analyzePolygon, formatAreaShort, uid } from './geo'
-import type { BaseLayerId, DisplaySettings, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer, SavedProject } from './types'
+import type { BaseLayerId, DisplaySettings, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer } from './types'
 
 const WORKSPACE_KEY = 'evren-jeofizik-gis-workspace-v1'
-const PROJECTS_KEY = 'evren-jeofizik-gis-projects-v1'
+const LEGACY_PROJECTS_KEY = 'evren-jeofizik-gis-projects-v1'
 const PERFORMANCE_KEY = 'evren-jeofizik-gis-performance-v1'
-const DISPLAY_KEY = 'evren-jeofizik-gis-display-v1'
+const DISPLAY_KEY = 'evren-jeofizik-gis-display-v2'
+const LEGACY_DISPLAY_KEY = 'evren-jeofizik-gis-display-v1'
+const MIN_CARD_SCALE = 70
+const MAX_CARD_SCALE = 160
 
 const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   coordinateCard: true,
@@ -25,7 +28,7 @@ const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   measurementCard: true,
   locationCard: true,
   headerStats: true,
-  cardSize: 'small',
+  cardScale: 100,
 }
 
 function createPolygon(index = 0): PolygonLayer {
@@ -60,16 +63,14 @@ function readWorkspace() {
   return [createPolygon()]
 }
 
-function readProjects() {
-  try {
-    const value = JSON.parse(localStorage.getItem(PROJECTS_KEY) || '[]')
-    return Array.isArray(value) ? value.map((project: SavedProject) => ({ ...project, polygons: project.polygons.map(normalizePolygon) })) : []
-  } catch { return [] }
-}
-
 function readDisplaySettings(): DisplaySettings {
   try {
-    const value = JSON.parse(localStorage.getItem(DISPLAY_KEY) || '{}') as Partial<DisplaySettings>
+    const stored = localStorage.getItem(DISPLAY_KEY) || localStorage.getItem(LEGACY_DISPLAY_KEY) || '{}'
+    const value = JSON.parse(stored) as Partial<DisplaySettings> & { cardSize?: string }
+    const legacyScale = value.cardSize === 'large' ? 145 : value.cardSize === 'medium' ? 120 : DEFAULT_DISPLAY_SETTINGS.cardScale
+    const cardScale = typeof value.cardScale === 'number' && Number.isFinite(value.cardScale)
+      ? Math.min(MAX_CARD_SCALE, Math.max(MIN_CARD_SCALE, Math.round(value.cardScale / 5) * 5))
+      : legacyScale
     return {
       coordinateCard: typeof value.coordinateCard === 'boolean' ? value.coordinateCard : DEFAULT_DISPLAY_SETTINGS.coordinateCard,
       areaCard: typeof value.areaCard === 'boolean' ? value.areaCard : DEFAULT_DISPLAY_SETTINGS.areaCard,
@@ -77,7 +78,7 @@ function readDisplaySettings(): DisplaySettings {
       measurementCard: typeof value.measurementCard === 'boolean' ? value.measurementCard : DEFAULT_DISPLAY_SETTINGS.measurementCard,
       locationCard: typeof value.locationCard === 'boolean' ? value.locationCard : DEFAULT_DISPLAY_SETTINGS.locationCard,
       headerStats: typeof value.headerStats === 'boolean' ? value.headerStats : DEFAULT_DISPLAY_SETTINGS.headerStats,
-      cardSize: value.cardSize === 'medium' || value.cardSize === 'large' ? value.cardSize : 'small',
+      cardScale,
     }
   } catch {
     return DEFAULT_DISPLAY_SETTINGS
@@ -94,7 +95,6 @@ export default function App() {
   const [baseLayer, setBaseLayer] = useState<BaseLayerId>('street')
   const [activePanel, setActivePanel] = useState<PanelId | null>(null)
   const [addMode, setAddMode] = useState(false)
-  const [savedProjects, setSavedProjects] = useState<SavedProject[]>(readProjects)
   const [fitRequest, setFitRequest] = useState(0)
   const [flyTarget, setFlyTarget] = useState<{ lat: number; lng: number; zoom?: number } | null>(null)
   const [performanceMode, setPerformanceMode] = useState<PerformanceMode>(() => {
@@ -117,10 +117,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(WORKSPACE_KEY, JSON.stringify(polygons))
   }, [polygons])
-
-  useEffect(() => {
-    localStorage.setItem(PROJECTS_KEY, JSON.stringify(savedProjects))
-  }, [savedProjects])
 
   useEffect(() => {
     localStorage.setItem(PERFORMANCE_KEY, performanceMode)
@@ -220,17 +216,6 @@ export default function App() {
     window.setTimeout(() => setFitRequest((value) => value + 1), 80)
   }
 
-  const saveProject = (name: string) => {
-    setSavedProjects((current) => [{ id: uid('project'), name, savedAt: new Date().toISOString(), polygons: clonePolygons(polygons) }, ...current].slice(0, 20))
-  }
-
-  const loadProject = (project: SavedProject) => {
-    updatePolygons(() => clonePolygons(project.polygons))
-    setActiveId(project.polygons[0]?.id ?? '')
-    window.setTimeout(() => setFitRequest((value) => value + 1), 80)
-    message(`${project.name} yüklendi.`, 'success')
-  }
-
   const resetWorkspace = () => {
     setActivePanel(null)
     setAddMode(false)
@@ -242,16 +227,15 @@ export default function App() {
   const clearAllData = () => {
     const blank = createPolygon()
     localStorage.removeItem(WORKSPACE_KEY)
-    localStorage.removeItem(PROJECTS_KEY)
+    localStorage.removeItem(LEGACY_PROJECTS_KEY)
     setPolygonsState([blank])
     setActiveId(blank.id)
-    setSavedProjects([])
     setAddMode(false)
     setFlyTarget(null)
     undoStack.current = []
     redoStack.current = []
     setClearRequest((value) => value + 1)
-    message('Tüm harita verileri ve kayıtlı projeler silindi.', 'success')
+    message('Tüm harita verileri silindi.', 'success')
   }
 
   return (
@@ -310,7 +294,6 @@ export default function App() {
           polygons={polygons}
           activeId={activeId}
           baseLayer={baseLayer}
-          savedProjects={savedProjects}
           performanceMode={performanceMode}
           performanceActive={performanceActive}
           displaySettings={displaySettings}
@@ -332,9 +315,6 @@ export default function App() {
           onClearPoints={() => mutateActive((layer) => ({ ...layer, points: [], desPoints: [] }))}
           onSetDesPoints={(polygonId, points) => updatePolygons((current) => current.map((layer) => layer.id === polygonId ? { ...layer, desPoints: points } : layer))}
           onImportLayers={importLayers}
-          onLoadProject={loadProject}
-          onSaveProject={saveProject}
-          onDeleteProject={(id) => setSavedProjects((current) => current.filter((project) => project.id !== id))}
           onFitActive={() => setFitRequest((value) => value + 1)}
           onFlyTo={(target) => setFlyTarget({ ...target })}
           onMessage={message}

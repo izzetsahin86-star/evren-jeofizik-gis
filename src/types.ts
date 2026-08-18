@@ -2,7 +2,6 @@ export type CoordinateFormat = 'utm' | 'latlon' | 'dms' | 'ddm'
 export type BaseLayerId = 'street' | 'satellite' | 'topographic'
 export type PanelId = 'layers' | 'coordinates' | 'tools' | 'import' | 'export' | 'settings'
 export type PerformanceMode = 'auto' | 'on' | 'off'
-export type MapCardSize = 'small' | 'medium' | 'large'
 
 export interface DisplaySettings {
   coordinateCard: boolean
@@ -11,7 +10,7 @@ export interface DisplaySettings {
   measurementCard: boolean
   locationCard: boolean
   headerStats: boolean
-  cardSize: MapCardSize
+  cardScale: number
 }
 
 export interface GeoPoint {
@@ -37,13 +36,6 @@ export interface PolygonAppearance {
   strokeWidth: number
   strokeOpacity: number
   fillOpacity: number
-}
-
-export interface SavedProject {
-  id: string
-  name: string
-  savedAt: string
-  polygons: PolygonLayer[]
 }
 
 export interface AnalysisResult {

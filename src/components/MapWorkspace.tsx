@@ -2,7 +2,7 @@ import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type
 import L, { type LeafletMouseEvent, type Map as LeafletMap } from 'leaflet'
 import { Circle, CircleMarker, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, useMapEvents } from 'react-leaflet'
 import { Check, Copy, Crosshair, LocateFixed, MousePointer2, Ruler, Trash2, Undo2 } from 'lucide-react'
-import { analyzePolygon, formatAreaShort, formatNumber, formatPoint, MAP_CENTER, pointBearing, pointDistance } from '../geo'
+import { analyzePolygon, formatAreaShort, formatNumber, MAP_CENTER, pointBearing, pointDistance, toUtm, utmLatitudeBand } from '../geo'
 import type { BaseLayerId, GeoPoint, PolygonLayer } from '../types'
 
 const tileLayers: Record<BaseLayerId, { url: string; attribution: string }> = {
@@ -116,8 +116,14 @@ interface CoordinateCardProps {
 function CoordinateCard({ positionListener, areaM2 }: CoordinateCardProps) {
   const [position, setPosition] = useState<MapPosition>({ lat: MAP_CENTER[0], lng: MAP_CENTER[1] })
   const [copied, setCopied] = useState(false)
-  const point = useMemo<GeoPoint>(() => ({ id: 'map-position', ...position }), [position])
-  const formatted = useMemo(() => formatPoint(point, 'utm'), [point])
+  const formatted = useMemo(() => {
+    const latitudeHemisphere = position.lat >= 0 ? 'N' : 'S'
+    const longitudeHemisphere = position.lng >= 0 ? 'E' : 'W'
+    const geographic = `${Math.abs(position.lat).toFixed(6)}° ${latitudeHemisphere} ${Math.abs(position.lng).toFixed(6)}° ${longitudeHemisphere}`
+    const utm = toUtm(position.lat, position.lng)
+    const utmText = `${utm.zone}${utmLatitudeBand(position.lat)} ${Math.round(utm.easting)} ${Math.round(utm.northing)}`
+    return { geographic, utm: utmText, copyValue: `${geographic}\n${utmText}` }
+  }, [position])
 
   useEffect(() => {
     positionListener.current = setPosition
@@ -126,10 +132,10 @@ function CoordinateCard({ positionListener, areaM2 }: CoordinateCardProps) {
 
   const copyCoordinate = async () => {
     try {
-      await navigator.clipboard.writeText(formatted)
+      await navigator.clipboard.writeText(formatted.copyValue)
     } catch {
       const input = document.createElement('textarea')
-      input.value = formatted
+      input.value = formatted.copyValue
       input.style.position = 'fixed'
       input.style.opacity = '0'
       document.body.appendChild(input)
@@ -142,12 +148,16 @@ function CoordinateCard({ positionListener, areaM2 }: CoordinateCardProps) {
   }
 
   return (
-    <section className="coordinate-card" aria-label="UTM harita koordinatı">
-      <button type="button" className="coordinate-copy" onClick={copyCoordinate} title="UTM koordinatını kopyala">
-        <span>{formatted}</span>{copied ? <Check size={14} /> : <Copy size={14} />}
+    <div className="coordinate-stack">
+      <button type="button" className="coordinate-card" onClick={copyCoordinate} title="Tüm koordinatları kopyala" aria-label={`${formatted.geographic}, UTM ${formatted.utm}. Tüm koordinatları kopyala`}>
+        <span className="coordinate-lines">
+          <span className="coordinate-geographic">{formatted.geographic}</span>
+          <span className="coordinate-utm">{formatted.utm}</span>
+        </span>
+        <span className="coordinate-copy-state" aria-hidden="true">{copied ? <Check size={16} /> : <Copy size={16} />}</span>
       </button>
-      {areaM2 > 0 && <em>{formatAreaShort(areaM2)} alan</em>}
-    </section>
+      {areaM2 > 0 && <span className="coordinate-area">{formatAreaShort(areaM2)} alan</span>}
+    </div>
   )
 }
 

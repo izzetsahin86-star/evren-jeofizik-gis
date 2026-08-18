@@ -47,6 +47,13 @@ export function utmZoneForLng(lng: number) {
   return Math.max(1, Math.min(60, Math.floor((lng + 180) / 6) + 1))
 }
 
+export function utmLatitudeBand(lat: number) {
+  const bands = 'CDEFGHJKLMNPQRSTUVWX'
+  const boundedLatitude = Math.max(-80, Math.min(84, lat))
+  if (boundedLatitude >= 72) return 'X'
+  return bands[Math.floor((boundedLatitude + 80) / 8)]
+}
+
 export function toUtm(lat: number, lng: number, zone = utmZoneForLng(lng), hemisphere: 'N' | 'S' = lat >= 0 ? 'N' : 'S', datum = 'WGS84') {
   const [easting, northing] = proj4('EPSG:4326', utmDefinition(zone, hemisphere, datum), [lng, lat])
   return { zone, hemisphere, easting, northing }

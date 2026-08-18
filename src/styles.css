@@ -54,7 +54,7 @@ button { color: inherit; }
 .map-number-marker.is-active { transform: scale(1.06); box-shadow: 0 0 0 3px color-mix(in srgb, var(--marker) 30%, transparent), 0 3px 10px rgba(15,23,42,.25); }
 .des-marker { display: block; width: 10px; height: 10px; border-radius: 2px; background: #10b981; border: 1px solid white; box-shadow: 0 1px 4px rgba(4,120,87,.45); }
 
-.coordinate-card { position: absolute; left: 16px; top: 20px; z-index: 500; min-width: 178px; padding: 10px 15px; display: grid; gap: 3px; text-align: left; border: 1px solid rgba(226,232,240,.9); border-radius: 14px; background: rgba(255,255,255,.93); box-shadow: 0 5px 18px rgba(15,23,42,.13); backdrop-filter: blur(12px); cursor: pointer; }
+.coordinate-card { position: absolute; left: 16px; top: 20px; z-index: 500; min-width: 178px; padding: 10px 15px; display: grid; gap: 3px; contain: layout paint; text-align: left; font-variant-numeric: tabular-nums; border: 1px solid rgba(226,232,240,.9); border-radius: 14px; background: rgba(255,255,255,.93); box-shadow: 0 5px 18px rgba(15,23,42,.13); backdrop-filter: blur(12px); cursor: pointer; }
 .coordinate-card strong { font-size: 12px; }
 .coordinate-card span { font-size: 11px; color: #4775bd; }
 .coordinate-card em { font-style: normal; font-size: 11px; font-weight: 750; color: #14845f; }
@@ -62,7 +62,8 @@ button { color: inherit; }
 .map-mode-actions button { min-width: 104px; height: 38px; padding: 0 14px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid rgba(226,232,240,.9); border-radius: 999px; background: rgba(255,255,255,.93); box-shadow: 0 5px 15px rgba(15,23,42,.11); color: #334155; font-size: 12px; font-weight: 650; cursor: pointer; backdrop-filter: blur(10px); }
 .map-mode-actions button.is-active { color: white; border-color: #2c79ee; background: #2c79ee; }
 .locate-button { position: absolute; left: 16px; bottom: 109px; z-index: 500; width: 50px; height: 50px; display: grid; place-items: center; border: 1px solid #e5e9ef; border-radius: 15px; background: rgba(255,255,255,.94); color: #334155; box-shadow: 0 7px 20px rgba(15,23,42,.15); cursor: pointer; }
-.map-crosshair { pointer-events: none; position: absolute; left: 50%; top: 50%; z-index: 400; width: 48px; height: 48px; transform: translate(-50%, -50%); color: rgba(9, 15, 24, .9); filter: drop-shadow(0 1px 0 white); }
+.map-crosshair { pointer-events: none; position: absolute; left: 50%; top: 50%; z-index: 400; width: 24px; height: 24px; transform: translate(-50%, -50%); color: rgba(9, 15, 24, .82); filter: drop-shadow(0 1px 0 white); }
+.map-crosshair svg { display: block; width: 100%; height: 100%; }
 
 .bottom-dock { position: absolute; z-index: 1100; left: 50%; bottom: 0; transform: translateX(-50%); width: min(420px, calc(100vw - 24px)); height: 84px; display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; padding: 8px 10px 6px; border: 1px solid rgba(255,255,255,.82); border-bottom: 0; border-radius: 23px 23px 0 0; background: rgba(255,255,255,.84); box-shadow: 0 -10px 28px rgba(15,23,42,.13); backdrop-filter: blur(18px); }
 .bottom-dock button { height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 15px; color: #8b98aa; background: transparent; font-size: 11px; font-weight: 650; cursor: pointer; transition: .18s ease; }
@@ -205,11 +206,11 @@ button { color: inherit; }
   .stat-pill.green, .header-divider, .header-actions button:nth-of-type(3), .header-actions button:nth-of-type(4) { display: none; }
   .app-header { padding-inline: 8px; }
   .active-strip { padding-inline: 9px; }
-  .coordinate-card { left: 9px; top: 10px; min-width: 158px; padding: 8px 10px; }
+  .coordinate-card { left: 9px; top: 10px; min-width: 158px; padding: 8px 10px; background: rgba(255,255,255,.98); box-shadow: 0 3px 10px rgba(15,23,42,.11); backdrop-filter: none; }
   .map-mode-actions { right: 9px; top: 10px; }
   .map-mode-actions button { min-width: 90px; height: 35px; padding: 0 10px; font-size: 10px; }
   .locate-button { left: 10px; bottom: 94px; width: 44px; height: 44px; }
-  .map-crosshair { top: 43%; }
+  .map-crosshair { top: 43%; width: 20px; height: 20px; }
   .workspace-panel { top: auto; left: 0; right: 0; bottom: 0; width: 100%; height: min(68vh, 650px); border: 0; border-top: 1px solid #e4e9ef; border-radius: 22px 22px 0 0; animation-name: panel-up; }
   @keyframes panel-up { from { opacity: 0; transform: translateY(25px); } to { opacity: 1; transform: translateY(0); } }
   .workspace-panel-title { min-height: 43px; padding-left: 18px; }

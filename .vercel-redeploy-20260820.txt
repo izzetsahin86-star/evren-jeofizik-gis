@@ -1,0 +1,1 @@
+Vercel Git integration redeploy trigger — 2026-08-20.

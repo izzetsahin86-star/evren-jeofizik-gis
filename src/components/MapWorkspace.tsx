@@ -1,7 +1,7 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from 'react'
 import L, { type LeafletMouseEvent, type Map as LeafletMap } from 'leaflet'
 import { Circle, CircleMarker, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, useMapEvents } from 'react-leaflet'
-import { Check, Copy, Crosshair, LocateFixed, MousePointer2, Ruler, Trash2, Undo2 } from 'lucide-react'
+import { Check, Copy, Crosshair, LocateFixed, MousePointer2, Navigation, Ruler, Square, Trash2, Undo2 } from 'lucide-react'
 import { analyzePolygon, formatAreaShort, formatNumber, MAP_CENTER, pointBearing, pointDistance, toUtm, utmLatitudeBand } from '../geo'
 import type { BaseLayerId, DisplaySettings, GeoPoint, PolygonLayer } from '../types'
 
@@ -20,7 +20,58 @@ const tileLayers: Record<BaseLayerId, { url: string; attribution: string }> = {
   },
 }
 
+const TRACK_STORAGE_KEY = 'evren-jeofizik-gis-live-track-v1'
+const MAX_TRACK_POINTS = 5000
+
 type MapPosition = { lat: number; lng: number }
+type GpsPosition = MapPosition & {
+  accuracy: number
+  altitude: number | null
+  speed: number | null
+  heading: number | null
+  timestamp: number
+}
+type TrackPoint = GpsPosition & { id: string }
+
+function readStoredTrack(): TrackPoint[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const stored = JSON.parse(localStorage.getItem(TRACK_STORAGE_KEY) || '[]') as Partial<TrackPoint>[]
+    if (!Array.isArray(stored)) return []
+    return stored
+      .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
+      .slice(-MAX_TRACK_POINTS)
+      .map((point, index) => ({
+        id: typeof point.id === 'string' ? point.id : `track-${Date.now()}-${index}`,
+        lat: Number(point.lat),
+        lng: Number(point.lng),
+        accuracy: Number.isFinite(point.accuracy) ? Math.max(1, Number(point.accuracy)) : 1,
+        altitude: typeof point.altitude === 'number' && Number.isFinite(point.altitude) ? point.altitude : null,
+        speed: typeof point.speed === 'number' && Number.isFinite(point.speed) ? point.speed : null,
+        heading: typeof point.heading === 'number' && Number.isFinite(point.heading) ? point.heading : null,
+        timestamp: typeof point.timestamp === 'number' && Number.isFinite(point.timestamp) ? point.timestamp : Date.now(),
+      }))
+  } catch {
+    return []
+  }
+}
+
+function gpsFromPosition(position: GeolocationPosition): GpsPosition {
+  return {
+    lat: position.coords.latitude,
+    lng: position.coords.longitude,
+    accuracy: Math.max(1, position.coords.accuracy),
+    altitude: position.coords.altitude,
+    speed: position.coords.speed,
+    heading: position.coords.heading,
+    timestamp: position.timestamp || Date.now(),
+  }
+}
+
+function formatTrackDistance(distanceM: number) {
+  if (distanceM >= 1000) return `${formatNumber(distanceM / 1000, 2)} km`
+  return `${formatNumber(distanceM, 0)} m`
+}
 
 function numberIcon(number: number, color: string, active: boolean) {
   return L.divIcon({
@@ -279,9 +330,14 @@ export default function MapWorkspace({
   const mapRef = useRef<LeafletMap | null>(null)
   const lastFitRequest = useRef(0)
   const positionListener = useRef<(point: MapPosition) => void>(() => undefined)
+  const watchIdRef = useRef<number | null>(null)
+  const trackingRef = useRef(false)
+  const firstTrackingFixRef = useRef(true)
   const [measureMode, setMeasureMode] = useState(false)
   const [measurePoints, setMeasurePoints] = useState<GeoPoint[]>([])
-  const [gpsPosition, setGpsPosition] = useState<(MapPosition & { accuracy: number }) | null>(null)
+  const [gpsPosition, setGpsPosition] = useState<GpsPosition | null>(null)
+  const [tracking, setTracking] = useState(false)
+  const [trackPoints, setTrackPoints] = useState<TrackPoint[]>(readStoredTrack)
   const active = polygons.find((layer) => layer.id === activeId) ?? polygons[0]
   const analysis = useMemo(() => analyzePolygon(active?.points ?? []), [active])
   const measurement = useMemo(() => {
@@ -290,6 +346,7 @@ export default function MapWorkspace({
     const areaM2 = measurePoints.length >= 3 ? analyzePolygon(measurePoints).areaM2 : 0
     return { distanceM, bearing, areaM2 }
   }, [measurePoints])
+  const trackDistanceM = useMemo(() => trackPoints.slice(1).reduce((sum, point, index) => sum + (pointDistance(trackPoints[index], point) ?? 0), 0), [trackPoints])
 
   useEffect(() => {
     const timer = window.setTimeout(() => mapRef.current?.invalidateSize(), 240)
@@ -302,10 +359,31 @@ export default function MapWorkspace({
   }, [flyTarget])
 
   useEffect(() => {
+    try {
+      localStorage.setItem(TRACK_STORAGE_KEY, JSON.stringify(trackPoints.slice(-MAX_TRACK_POINTS)))
+    } catch {
+      // Depolama dolu veya kapalıysa canlı takip çalışmaya devam eder.
+    }
+  }, [trackPoints])
+
+  useEffect(() => () => {
+    if (watchIdRef.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef.current)
+    watchIdRef.current = null
+    trackingRef.current = false
+  }, [])
+
+  useEffect(() => {
     if (!clearRequest) return
+    if (watchIdRef.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef.current)
+    watchIdRef.current = null
+    trackingRef.current = false
+    firstTrackingFixRef.current = true
+    setTracking(false)
     setMeasureMode(false)
     setMeasurePoints([])
     setGpsPosition(null)
+    setTrackPoints([])
+    localStorage.removeItem(TRACK_STORAGE_KEY)
   }, [clearRequest])
 
   useEffect(() => {
@@ -330,18 +408,84 @@ export default function MapWorkspace({
     setMeasureMode((value) => !value)
   }
 
+  const recordTrackPoint = (point: GpsPosition) => {
+    const next: TrackPoint = { ...point, id: `track-${point.timestamp}-${Math.random().toString(36).slice(2, 7)}` }
+    setTrackPoints((current) => {
+      const previous = current[current.length - 1]
+      if (previous) {
+        const movedM = pointDistance(previous, next) ?? 0
+        const elapsedMs = Math.max(0, next.timestamp - previous.timestamp)
+        if (movedM < 1 && elapsedMs < 10000) return current
+      }
+      return [...current, next].slice(-MAX_TRACK_POINTS)
+    })
+  }
+
+  const stopTracking = (announce = true) => {
+    const wasTracking = trackingRef.current
+    if (watchIdRef.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchIdRef.current)
+    watchIdRef.current = null
+    trackingRef.current = false
+    firstTrackingFixRef.current = true
+    setTracking(false)
+    if (announce && wasTracking) onMessage(`Canlı takip durduruldu · ${trackPoints.length} kayıt · ${formatTrackDistance(trackDistanceM)}`, 'info')
+  }
+
+  const startTracking = () => {
+    if (!navigator.geolocation) {
+      onMessage('Bu cihaz konum hizmetini desteklemiyor.', 'error')
+      return
+    }
+    if (watchIdRef.current !== null) return
+
+    trackingRef.current = true
+    firstTrackingFixRef.current = true
+    setTracking(true)
+
+    const watchId = navigator.geolocation.watchPosition((position) => {
+      const point = gpsFromPosition(position)
+      setGpsPosition(point)
+      if (trackingRef.current) recordTrackPoint(point)
+
+      if (mapRef.current) {
+        if (firstTrackingFixRef.current) {
+          firstTrackingFixRef.current = false
+          mapRef.current.flyTo([point.lat, point.lng], Math.max(17, mapRef.current.getZoom()), { duration: 0.8 })
+        } else {
+          mapRef.current.panTo([point.lat, point.lng], { animate: true, duration: 0.35 })
+        }
+      }
+    }, (error) => {
+      const permissionDenied = error.code === error.PERMISSION_DENIED
+      stopTracking(false)
+      onMessage(permissionDenied ? 'Canlı takip için konum izni verilmedi.' : 'Canlı GPS konumu alınamadı. Konum servislerini kontrol edin.', 'error')
+    }, {
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 1000,
+    })
+
+    watchIdRef.current = watchId
+    onMessage('Canlı GPS takibi başlatıldı. Hareket izi kaydediliyor.', 'success')
+  }
+
+  const clearTrack = () => {
+    setTrackPoints([])
+    localStorage.removeItem(TRACK_STORAGE_KEY)
+    onMessage('Kayıtlı canlı konum izi temizlendi.', 'success')
+  }
+
   const locate = () => {
     if (!navigator.geolocation) {
       onMessage('Bu cihaz konum hizmetini desteklemiyor.', 'error')
       return
     }
     navigator.geolocation.getCurrentPosition((position) => {
-      const point = { lat: position.coords.latitude, lng: position.coords.longitude }
-      const accuracy = Math.max(1, position.coords.accuracy)
-      setGpsPosition({ ...point, accuracy })
+      const point = gpsFromPosition(position)
+      setGpsPosition(point)
       mapRef.current?.flyTo([point.lat, point.lng], 17, { duration: 0.8 })
-      onLocate(point)
-      onMessage(`Konum bulundu · yaklaşık ±${formatNumber(accuracy, 0)} m hassasiyet`, 'success')
+      onLocate({ lat: point.lat, lng: point.lng })
+      onMessage(`Konum bulundu · yaklaşık ±${formatNumber(point.accuracy, 0)} m hassasiyet`, 'success')
     }, () => onMessage('Konum alınamadı. Cihazın konum iznini kontrol edin.', 'error'), {
       enableHighAccuracy: true,
       timeout: 12000,
@@ -365,10 +509,22 @@ export default function MapWorkspace({
         {measurePoints.length >= 3 && <Polygon positions={measurePoints.map((point) => [point.lat, point.lng])} pathOptions={{ color: '#ef4444', weight: 2, fillColor: '#ef4444', fillOpacity: 0.08, dashArray: '8 7' }} />}
         {measurePoints.map((point, index) => <CircleMarker key={point.id} center={[point.lat, point.lng]} radius={5} pathOptions={{ color: 'white', weight: 2, fillColor: '#ef4444', fillOpacity: 1 }}><Tooltip direction="top">Ölçüm {index + 1}</Tooltip></CircleMarker>)}
 
+        {trackPoints.length >= 2 && (
+          <Polyline
+            positions={trackPoints.map((point) => [point.lat, point.lng])}
+            pathOptions={{ color: '#f59e0b', weight: 4, opacity: 0.9 }}
+          >
+            <Tooltip sticky>Canlı takip izi · {trackPoints.length} kayıt · {formatTrackDistance(trackDistanceM)}</Tooltip>
+          </Polyline>
+        )}
+        {trackPoints.length === 1 && <CircleMarker center={[trackPoints[0].lat, trackPoints[0].lng]} radius={4} pathOptions={{ color: '#f59e0b', weight: 2, fillColor: '#f59e0b', fillOpacity: 1 }} />}
+
         {gpsPosition && (
           <Fragment>
             <Circle center={[gpsPosition.lat, gpsPosition.lng]} radius={gpsPosition.accuracy} pathOptions={{ color: '#2563eb', weight: 1, fillColor: '#3b82f6', fillOpacity: 0.1 }} />
-            <CircleMarker center={[gpsPosition.lat, gpsPosition.lng]} radius={7} pathOptions={{ color: 'white', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }}><Tooltip direction="top">GPS · ±{formatNumber(gpsPosition.accuracy, 0)} m</Tooltip></CircleMarker>
+            <CircleMarker center={[gpsPosition.lat, gpsPosition.lng]} radius={7} pathOptions={{ color: 'white', weight: 3, fillColor: tracking ? '#16a34a' : '#2563eb', fillOpacity: 1 }}>
+              <Tooltip direction="top">{tracking ? 'CANLI GPS' : 'GPS'} · ±{formatNumber(gpsPosition.accuracy, 0)} m{gpsPosition.speed !== null ? ` · ${formatNumber(gpsPosition.speed * 3.6, 1)} km/sa` : ''}</Tooltip>
+            </CircleMarker>
           </Fragment>
         )}
       </MapContainer>
@@ -393,8 +549,10 @@ export default function MapWorkspace({
 
       {displaySettings.locationCard && (
         <div className="location-controls">
-          <button type="button" className={`locate-button${gpsPosition ? ' has-fix' : ''}`} onClick={locate} aria-label="Mevcut konumum"><LocateFixed size={22} /></button>
-          {gpsPosition && <span className="gps-accuracy">±{formatNumber(gpsPosition.accuracy, 0)} m</span>}
+          <button type="button" className={`locate-button${gpsPosition ? ' has-fix' : ''}`} onClick={locate} aria-label="Mevcut konumum" title="Mevcut konumu bir kez bul"><LocateFixed size={22} /></button>
+          <button type="button" className={`locate-button${tracking ? ' has-fix' : ''}`} onClick={() => tracking ? stopTracking() : startTracking()} aria-label={tracking ? 'Canlı konum takibini durdur' : 'Canlı konum takibini başlat'} title={tracking ? 'Canlı takibi durdur' : 'Canlı takibi başlat'}>{tracking ? <Square size={18} fill="currentColor" /> : <Navigation size={21} />}</button>
+          {gpsPosition && <span className="gps-accuracy">±{formatNumber(gpsPosition.accuracy, 0)} m{tracking || trackPoints.length ? ` · ${tracking ? 'CANLI · ' : ''}${trackPoints.length} pkt · ${formatTrackDistance(trackDistanceM)}` : ''}</span>}
+          {trackPoints.length > 0 && !tracking && <button type="button" className="locate-button" onClick={clearTrack} aria-label="Canlı takip izini temizle" title="Takip izini temizle"><Trash2 size={18} /></button>}
         </div>
       )}
       <div className="map-crosshair" aria-hidden="true"><Crosshair size={24} strokeWidth={1.4} /></div>

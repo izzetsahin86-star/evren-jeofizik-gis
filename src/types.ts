@@ -1,6 +1,6 @@
 export type CoordinateFormat = 'utm' | 'latlon' | 'dms' | 'ddm'
 export type BaseLayerId = 'street' | 'satellite' | 'topographic'
-export type PanelId = 'layers' | 'coordinates' | 'tools' | 'import' | 'export' | 'settings'
+export type PanelId = 'layers' | 'coordinates' | 'live' | 'tools' | 'import' | 'export' | 'settings'
 export type PerformanceMode = 'auto' | 'on' | 'off'
 
 export interface DisplaySettings {

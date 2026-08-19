@@ -8,6 +8,7 @@ import {
   X,
 } from 'lucide-react'
 import BottomPanel from './components/BottomPanel'
+import LiveTrackingCoordinatePanel from './components/LiveTrackingCoordinatePanel'
 import MapWorkspace from './components/MapWorkspace'
 import { dockItems } from './dock'
 import { DEFAULT_POLYGON_APPEARANCE, POLYGON_COLORS, analyzePolygon, formatAreaShort, uid } from './geo'
@@ -216,6 +217,27 @@ export default function App() {
     window.setTimeout(() => setFitRequest((value) => value + 1), 80)
   }
 
+  const convertTrackToPolygon = (points: Array<{ lat: number; lng: number }>) => {
+    if (points.length < 3) {
+      message('Poligona dönüştürmek için en az 3 GPS noktası gerekir.', 'error')
+      return
+    }
+
+    const layer = createPolygon(polygons.length)
+    const now = new Date()
+    layer.name = `GPS Takip ${now.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' })} ${now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`
+    layer.points = points.map((point) => ({ ...point, id: uid('pt') }))
+
+    updatePolygons((current) => {
+      const shouldReplaceBlank = current.length === 1 && current[0].points.length === 0
+      return shouldReplaceBlank ? [layer] : [...current, layer]
+    })
+    setActiveId(layer.id)
+    setActivePanel('coordinates')
+    window.setTimeout(() => setFitRequest((value) => value + 1), 100)
+    message(`${points.length} GPS noktası yeni poligona dönüştürüldü.`, 'success')
+  }
+
   const resetWorkspace = () => {
     setActivePanel(null)
     setAddMode(false)
@@ -320,6 +342,14 @@ export default function App() {
           onMessage={message}
         />
       )}
+
+      <LiveTrackingCoordinatePanel
+        active={activePanel === 'coordinates'}
+        locationCardEnabled={displaySettings.locationCard}
+        onEnsureLocationCard={() => setDisplaySettings((current) => current.locationCard ? current : { ...current, locationCard: true })}
+        onConvertTrackToPolygon={convertTrackToPolygon}
+        onMessage={message}
+      />
 
       <nav className="bottom-dock" aria-label="Çalışma araçları">
         {dockItems.map((item) => {

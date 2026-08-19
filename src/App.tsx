@@ -8,11 +8,11 @@ import {
   X,
 } from 'lucide-react'
 import BottomPanel from './components/BottomPanel'
-import LiveTrackingCoordinatePanel from './components/LiveTrackingCoordinatePanel'
+import LiveLocationPanel from './components/LiveLocationPanel'
 import MapWorkspace from './components/MapWorkspace'
-import { dockItems } from './dock'
+import { dockItems, type DockPanelId } from './dock'
 import { DEFAULT_POLYGON_APPEARANCE, POLYGON_COLORS, analyzePolygon, formatAreaShort, uid } from './geo'
-import type { BaseLayerId, DisplaySettings, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer } from './types'
+import type { BaseLayerId, DisplaySettings, GeoPoint, PerformanceMode, PolygonAppearance, PolygonLayer } from './types'
 
 const WORKSPACE_KEY = 'evren-jeofizik-gis-workspace-v1'
 const LEGACY_PROJECTS_KEY = 'evren-jeofizik-gis-projects-v1'
@@ -94,7 +94,7 @@ export default function App() {
   const [polygons, setPolygonsState] = useState<PolygonLayer[]>(readWorkspace)
   const [activeId, setActiveId] = useState(() => polygons[0].id)
   const [baseLayer, setBaseLayer] = useState<BaseLayerId>('street')
-  const [activePanel, setActivePanel] = useState<PanelId | null>(null)
+  const [activePanel, setActivePanel] = useState<DockPanelId | null>(null)
   const [addMode, setAddMode] = useState(false)
   const [fitRequest, setFitRequest] = useState(0)
   const [flyTarget, setFlyTarget] = useState<{ lat: number; lng: number; zoom?: number } | null>(null)
@@ -310,7 +310,7 @@ export default function App() {
         onMessage={message}
       />
 
-      {activePanel && (
+      {activePanel && activePanel !== 'live' && (
         <BottomPanel
           panel={activePanel}
           polygons={polygons}
@@ -343,10 +343,13 @@ export default function App() {
         />
       )}
 
-      <LiveTrackingCoordinatePanel
-        active={activePanel === 'coordinates'}
+      <LiveLocationPanel
+        active={activePanel === 'live'}
+        polygons={polygons}
         locationCardEnabled={displaySettings.locationCard}
         onEnsureLocationCard={() => setDisplaySettings((current) => current.locationCard ? current : { ...current, locationCard: true })}
+        onClose={() => setActivePanel(null)}
+        onFlyTo={(target) => setFlyTarget({ ...target })}
         onConvertTrackToPolygon={convertTrackToPolygon}
         onMessage={message}
       />
@@ -354,7 +357,7 @@ export default function App() {
       <nav className="bottom-dock" aria-label="Çalışma araçları">
         {dockItems.map((item) => {
           const Icon = item.icon
-          return <button key={item.id} type="button" className={activePanel === item.id ? 'is-active' : ''} onClick={() => setActivePanel((current) => current === item.id ? null : item.id)}><Icon size={22} /><span>{item.label}</span></button>
+          return <button key={item.id} data-panel-id={item.id} type="button" className={activePanel === item.id ? 'is-active' : ''} onClick={() => setActivePanel((current) => current === item.id ? null : item.id)}><Icon size={22} /><span>{item.label}</span></button>
         })}
       </nav>
 

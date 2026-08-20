@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'evren-gis-v21'
+const CACHE_VERSION = 'evren-gis-v22'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const TILE_CACHE = `${CACHE_VERSION}-tiles`
 const SHELL_FILES = ['/', '/index.html', '/offline.html', '/manifest.webmanifest', '/icons/evren-gis.svg', '/icons/evren-jeofizik-logo.svg']
@@ -28,7 +28,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys()
-    await Promise.all(keys.filter((key) => !key.startsWith(CACHE_VERSION)).map((key) => cache.delete(key)))
+    await Promise.all(keys.filter((key) => !key.startsWith(CACHE_VERSION)).map((key) => caches.delete(key)))
     await self.clients.claim()
   })())
 })

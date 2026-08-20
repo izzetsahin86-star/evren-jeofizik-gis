@@ -1,9 +1,12 @@
-import { useEffect, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
 import JSZip from 'jszip'
-import { CheckCircle2, FileDown, MapPinned, Upload, X } from 'lucide-react'
+import { CheckCircle2, FileDown, Upload, X } from 'lucide-react'
+import { formatPoint, polygonsToGeoJson, polygonsToKml, readSpatialFile } from '../geo'
+import type { CoordinateFormat, PolygonLayer } from '../types'
 
 const FIELD_POINTS_KEY = 'evren-jeofizik-gis-field-points-v1'
+const WORKSPACE_KEY = 'evren-jeofizik-gis-workspace-v1'
 const FIELD_POINTS_CHANGED_EVENT = 'evren-field-points-changed'
 
 type FieldPointSymbol = 'pin' | 'flag' | 'camera' | 'warning' | 'sample' | 'target' | 'note' | 'vehicle'
@@ -21,7 +24,21 @@ type FieldPoint = {
   updatedAt: number
 }
 
+type PendingImport = {
+  file: File
+  name: string
+  size: number
+  layers: PolygonLayer[]
+  fieldPoints: FieldPoint[]
+}
+
 const SYMBOLS: FieldPointSymbol[] = ['pin', 'flag', 'camera', 'warning', 'sample', 'target', 'note', 'vehicle']
+const COORDINATE_OPTIONS: Array<{ value: CoordinateFormat; label: string }> = [
+  { value: 'latlon', label: 'Lat / Lon' },
+  { value: 'utm', label: 'UTM' },
+  { value: 'dms', label: 'DMS' },
+  { value: 'ddm', label: 'DDM' },
+]
 
 function uid(prefix = 'field-import') {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -58,6 +75,28 @@ function readStoredPoints(): FieldPoint[] {
   }
 }
 
+function readStoredPolygons(): PolygonLayer[] {
+  try {
+    const values = JSON.parse(localStorage.getItem(WORKSPACE_KEY) || '[]') as Partial<PolygonLayer>[]
+    if (!Array.isArray(values)) return []
+    return values.flatMap((value, index) => {
+      if (!Array.isArray(value.points) || !Array.isArray(value.desPoints)) return []
+      return [{
+        id: value.id || `polygon-${index}`,
+        name: value.name || `Poligon ${index + 1}`,
+        color: value.color || '#1597e5',
+        strokeWidth: value.strokeWidth,
+        strokeOpacity: value.strokeOpacity,
+        fillOpacity: value.fillOpacity,
+        points: value.points,
+        desPoints: value.desPoints,
+      }]
+    })
+  } catch {
+    return []
+  }
+}
+
 function saveStoredPoints(points: FieldPoint[]) {
   localStorage.setItem(FIELD_POINTS_KEY, JSON.stringify(points))
   window.dispatchEvent(new CustomEvent(FIELD_POINTS_CHANGED_EVENT))
@@ -65,6 +104,11 @@ function saveStoredPoints(points: FieldPoint[]) {
 
 function xmlEscape(value: string) {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;')
+}
+
+function csvEscape(value: string | number) {
+  const text = String(value ?? '')
+  return `"${text.replaceAll('"', '""')}"`
 }
 
 function safeName(value: string) {
@@ -83,29 +127,78 @@ function downloadBlob(value: string | Blob, filename: string, type?: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-function pointsToKml(points: FieldPoint[]) {
-  const placemarks = points.map((point) => `    <Placemark>\n      <name>${xmlEscape(point.name)}</name>\n      <description>${xmlEscape(point.description)}</description>\n      <ExtendedData>\n        <Data name="evren:type"><value>field-point</value></Data>\n        <Data name="evren:symbol"><value>${xmlEscape(point.symbol)}</value></Data>\n        <Data name="evren:note"><value>${xmlEscape(point.note)}</value></Data>\n        <Data name="evren:description"><value>${xmlEscape(point.description)}</value></Data>\n        <Data name="evren:createdAt"><value>${point.createdAt}</value></Data>\n        <Data name="evren:updatedAt"><value>${point.updatedAt}</value></Data>\n      </ExtendedData>\n      <Point><coordinates>${point.lng},${point.lat},0</coordinates></Point>\n    </Placemark>`).join('\n')
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document>\n    <name>Evren Jeofizik Saha Noktaları</name>\n${placemarks}\n  </Document>\n</kml>\n`
+function fieldPointPlacemark(point: FieldPoint) {
+  return `<Placemark><name>${xmlEscape(point.name)}</name><description>${xmlEscape(point.description)}</description><ExtendedData><Data name="evren:type"><value>field-point</value></Data><Data name="evren:symbol"><value>${xmlEscape(point.symbol)}</value></Data><Data name="evren:note"><value>${xmlEscape(point.note)}</value></Data><Data name="evren:description"><value>${xmlEscape(point.description)}</value></Data><Data name="evren:createdAt"><value>${point.createdAt}</value></Data><Data name="evren:updatedAt"><value>${point.updatedAt}</value></Data></ExtendedData><Point><coordinates>${point.lng},${point.lat},0</coordinates></Point></Placemark>`
 }
 
-function pointsToGpx(points: FieldPoint[]) {
-  const waypoints = points.map((point) => `  <wpt lat="${point.lat}" lon="${point.lng}">\n    <name>${xmlEscape(point.name)}</name>\n    <cmt>${xmlEscape(point.note)}</cmt>\n    <desc>${xmlEscape(point.description)}</desc>\n    <type>${xmlEscape(point.symbol)}</type>\n    <extensions>\n      <evren:symbol>${xmlEscape(point.symbol)}</evren:symbol>\n      <evren:createdAt>${point.createdAt}</evren:createdAt>\n      <evren:updatedAt>${point.updatedAt}</evren:updatedAt>\n    </extensions>\n  </wpt>`).join('\n')
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Evren Jeofizik GIS" xmlns="http://www.topografix.com/GPX/1/1" xmlns:evren="https://evrenjeofizik.com/gis">\n${waypoints}\n</gpx>\n`
+function combinedKml(polygons: PolygonLayer[], points: FieldPoint[]) {
+  const spatial = polygons.filter((layer) => layer.points.length || layer.desPoints.length)
+  const field = points.map(fieldPointPlacemark).join('')
+  if (!spatial.length) return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Evren Jeofizik</name>${field}</Document></kml>`
+  return polygonsToKml(spatial).replace('</Document>', `${field}</Document>`)
 }
 
-function pointsToGeoJson(points: FieldPoint[]) {
-  return {
-    type: 'FeatureCollection',
-    name: 'Evren Jeofizik Saha Noktaları',
-    features: points.map((point) => ({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: [point.lng, point.lat] },
-      properties: {
-        evrenType: 'field-point', name: point.name, note: point.note, description: point.description,
-        symbol: point.symbol, createdAt: point.createdAt, updatedAt: point.updatedAt,
-      },
-    })),
-  }
+function combinedGeoJson(polygons: PolygonLayer[], points: FieldPoint[]) {
+  const spatial = polygonsToGeoJson(polygons.filter((layer) => layer.points.length)) as { type: string; features: any[] }
+  const desFeatures = polygons.flatMap((layer) => layer.desPoints.map((point) => ({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [point.lng, point.lat] },
+    properties: { evrenType: 'des-point', name: point.name || 'DES', parentLayerId: layer.id, parentLayerName: layer.name },
+  })))
+  const fieldFeatures = points.map((point) => ({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [point.lng, point.lat] },
+    properties: {
+      evrenType: 'field-point',
+      name: point.name,
+      note: point.note,
+      description: point.description,
+      symbol: point.symbol,
+      createdAt: point.createdAt,
+      updatedAt: point.updatedAt,
+    },
+  }))
+  return { type: 'FeatureCollection', name: 'Evren Jeofizik Projesi', features: [...spatial.features, ...desFeatures, ...fieldFeatures] }
+}
+
+function combinedCsv(polygons: PolygonLayer[], points: FieldPoint[], format: CoordinateFormat) {
+  const rows = ['Tür,Katman / Nokta,Sıra,Koordinat,Sembol,Not,Açıklama']
+  polygons.forEach((layer) => {
+    layer.points.forEach((point, index) => rows.push([
+      csvEscape(layer.points.length >= 3 ? 'Poligon' : 'Hat'),
+      csvEscape(layer.name),
+      index + 1,
+      csvEscape(formatPoint(point, format)),
+      '', '', '',
+    ].join(',')))
+    layer.desPoints.forEach((point, index) => rows.push([
+      csvEscape('DES'),
+      csvEscape(point.name || layer.name),
+      index + 1,
+      csvEscape(formatPoint(point, format)),
+      '', '', '',
+    ].join(',')))
+  })
+  points.forEach((point, index) => rows.push([
+    csvEscape('Saha Noktası'),
+    csvEscape(point.name),
+    index + 1,
+    csvEscape(formatPoint({ id: point.id, lat: point.lat, lng: point.lng }, format)),
+    csvEscape(point.symbol),
+    csvEscape(point.note),
+    csvEscape(point.description),
+  ].join(',')))
+  return rows.join('\n')
+}
+
+function combinedGpx(polygons: PolygonLayer[], points: FieldPoint[]) {
+  const fieldWaypoints = points.map((point) => `<wpt lat="${point.lat}" lon="${point.lng}"><name>${xmlEscape(point.name)}</name><cmt>${xmlEscape(point.note)}</cmt><desc>${xmlEscape(point.description)}</desc><type>${xmlEscape(point.symbol)}</type><extensions><evren:kind>field-point</evren:kind><evren:symbol>${xmlEscape(point.symbol)}</evren:symbol><evren:createdAt>${point.createdAt}</evren:createdAt><evren:updatedAt>${point.updatedAt}</evren:updatedAt></extensions></wpt>`).join('')
+  const desWaypoints = polygons.flatMap((layer) => layer.desPoints.map((point) => `<wpt lat="${point.lat}" lon="${point.lng}"><name>${xmlEscape(point.name || 'DES')}</name><type>DES</type><extensions><evren:kind>des-point</evren:kind><evren:parentLayer>${xmlEscape(layer.name)}</evren:parentLayer></extensions></wpt>`)).join('')
+  const tracks = polygons.filter((layer) => layer.points.length).map((layer) => {
+    const trackPoints = layer.points.length >= 3 ? [...layer.points, layer.points[0]] : layer.points
+    return `<trk><name>${xmlEscape(layer.name)}</name><extensions><evren:kind>${layer.points.length >= 3 ? 'polygon' : 'line'}</evren:kind></extensions><trkseg>${trackPoints.map((point) => `<trkpt lat="${point.lat}" lon="${point.lng}"></trkpt>`).join('')}</trkseg></trk>`
+  }).join('')
+  return `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Evren Jeofizik GIS" xmlns="http://www.topografix.com/GPX/1/1" xmlns:evren="https://evrenjeofizik.com/gis">${fieldWaypoints}${desWaypoints}${tracks}</gpx>`
 }
 
 function elements(root: ParentNode, name: string) {
@@ -140,36 +233,47 @@ function importedPoint(input: Partial<FieldPoint> & { lat: number; lng: number }
   }
 }
 
-function parseKml(text: string) {
+function parseFieldKml(text: string) {
   const doc = new DOMParser().parseFromString(text, 'application/xml')
   if (elements(doc, 'parsererror').length) throw new Error('KML dosyası okunamadı.')
+  const hasSpatialGeometry = elements(doc, 'Polygon').length > 0 || elements(doc, 'LineString').length > 0
   return elements(doc, 'Placemark').flatMap((placemark, index) => {
     const pointNode = elements(placemark, 'Point')[0]
     if (!pointNode) return []
-    const [lngText, latText] = (firstText(pointNode, 'coordinates').trim().split(/\s+/)[0] ?? '').split(',')
     const data = new Map<string, string>()
     elements(placemark, 'Data').forEach((node) => {
       const key = node.getAttribute('name') || ''
       if (key) data.set(key, firstText(node, 'value'))
     })
+    const kind = data.get('evren:type') || ''
+    if (kind === 'des-point') return []
+    if (hasSpatialGeometry && kind !== 'field-point') return []
+    const [lngText, latText] = (firstText(pointNode, 'coordinates').trim().split(/\s+/)[0] ?? '').split(',')
     const point = importedPoint({
-      lat: Number(latText), lng: Number(lngText), name: firstText(placemark, 'name'),
+      lat: Number(latText),
+      lng: Number(lngText),
+      name: firstText(placemark, 'name'),
       note: data.get('evren:note') || '',
       description: data.get('evren:description') || firstText(placemark, 'description'),
       symbol: normalizeSymbol(data.get('evren:symbol')),
-      createdAt: parseTime(data.get('evren:createdAt') || ''), updatedAt: parseTime(data.get('evren:updatedAt') || ''),
+      createdAt: parseTime(data.get('evren:createdAt') || ''),
+      updatedAt: parseTime(data.get('evren:updatedAt') || ''),
     }, index)
     return point ? [point] : []
   })
 }
 
-function parseGpx(text: string) {
+function parseFieldGpx(text: string) {
   const doc = new DOMParser().parseFromString(text, 'application/xml')
   if (elements(doc, 'parsererror').length) throw new Error('GPX dosyası okunamadı.')
   return elements(doc, 'wpt').flatMap((waypoint, index) => {
+    if (firstText(waypoint, 'kind') === 'des-point') return []
     const point = importedPoint({
-      lat: Number(waypoint.getAttribute('lat')), lng: Number(waypoint.getAttribute('lon')),
-      name: firstText(waypoint, 'name'), note: firstText(waypoint, 'cmt'), description: firstText(waypoint, 'desc'),
+      lat: Number(waypoint.getAttribute('lat')),
+      lng: Number(waypoint.getAttribute('lon')),
+      name: firstText(waypoint, 'name'),
+      note: firstText(waypoint, 'cmt'),
+      description: firstText(waypoint, 'desc'),
       symbol: normalizeSymbol(firstText(waypoint, 'symbol') || firstText(waypoint, 'type')),
       createdAt: parseTime(firstText(waypoint, 'createdAt') || firstText(waypoint, 'time')),
       updatedAt: parseTime(firstText(waypoint, 'updatedAt')),
@@ -178,14 +282,16 @@ function parseGpx(text: string) {
   })
 }
 
-function parseGeoJson(text: string) {
+function parseFieldGeoJson(text: string) {
   const value = JSON.parse(text) as { type?: string; features?: Array<{ geometry?: { type?: string; coordinates?: unknown[] }; properties?: Record<string, unknown> }> }
   if (value.type !== 'FeatureCollection' || !Array.isArray(value.features)) return []
   return value.features.flatMap((feature, index) => {
     if (feature.geometry?.type !== 'Point' || !Array.isArray(feature.geometry.coordinates)) return []
     const properties = feature.properties ?? {}
+    if (properties.evrenType === 'des-point') return []
     const point = importedPoint({
-      lng: Number(feature.geometry.coordinates[0]), lat: Number(feature.geometry.coordinates[1]),
+      lng: Number(feature.geometry.coordinates[0]),
+      lat: Number(feature.geometry.coordinates[1]),
       name: typeof properties.name === 'string' ? properties.name : '',
       note: typeof properties.note === 'string' ? properties.note : '',
       description: typeof properties.description === 'string' ? properties.description : '',
@@ -197,36 +303,68 @@ function parseGeoJson(text: string) {
   })
 }
 
-async function readFieldFile(file: File) {
+async function readFieldPoints(file: File) {
   const extension = file.name.toLowerCase().split('.').pop() || ''
+  if (extension === 'csv') return []
   if (extension === 'kmz') {
     const zip = await JSZip.loadAsync(await file.arrayBuffer())
     const entry = Object.values(zip.files).find((item) => !item.dir && item.name.toLowerCase().endsWith('.kml'))
     if (!entry) throw new Error('KMZ içinde KML bulunamadı.')
-    return parseKml(await entry.async('string'))
+    return parseFieldKml(await entry.async('string'))
   }
   const text = await file.text()
-  if (extension === 'kml') return parseKml(text)
-  if (extension === 'gpx') return parseGpx(text)
-  if (extension === 'geojson' || extension === 'json') return parseGeoJson(text)
-  throw new Error('Desteklenmeyen saha noktası dosyası.')
+  if (extension === 'kml') return parseFieldKml(text)
+  if (extension === 'gpx') return parseFieldGpx(text)
+  if (extension === 'geojson' || extension === 'json') return parseFieldGeoJson(text)
+  return []
+}
+
+function setFileOnInput(input: HTMLInputElement, file: File) {
+  const transfer = new DataTransfer()
+  transfer.items.add(file)
+  input.files = transfer.files
+  input.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+async function waitForOriginalConfirm(host: HTMLElement, timeoutMs = 3000) {
+  const stack = host.closest('.panel-stack')
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    const button = Array.from(stack?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((item) => item.textContent?.includes('Haritaya Ekle'))
+    if (button) return button
+    await new Promise((resolve) => window.setTimeout(resolve, 60))
+  }
+  return null
 }
 
 export default function FieldPointsTransferInlineFeature() {
   const [panel, setPanel] = useState<'import' | 'export' | null>(null)
   const [host, setHost] = useState<HTMLElement | null>(null)
-  const [pending, setPending] = useState<{ name: string; size: number; points: FieldPoint[] } | null>(null)
+  const [pending, setPending] = useState<PendingImport | null>(null)
   const [reading, setReading] = useState(false)
-  const [count, setCount] = useState(() => readStoredPoints().length)
+  const [filename, setFilename] = useState('evren-jeofizik-projesi')
+  const [csvFormat, setCsvFormat] = useState<CoordinateFormat>('latlon')
+  const [fieldCount, setFieldCount] = useState(() => readStoredPoints().length)
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null)
+
+  const projectStats = useMemo(() => {
+    const polygons = readStoredPolygons()
+    return {
+      layers: polygons.filter((layer) => layer.points.length).length,
+      polygonPoints: polygons.reduce((sum, layer) => sum + layer.points.length, 0),
+      des: polygons.reduce((sum, layer) => sum + layer.desPoints.length, 0),
+      field: fieldCount,
+    }
+  }, [fieldCount, panel])
 
   useEffect(() => {
     const discover = () => {
       const active = document.querySelector<HTMLButtonElement>('.bottom-dock button.is-active[data-panel-id]')
       const id = active?.dataset.panelId
       const next = id === 'import' || id === 'export' ? id : null
+      const nextHost = next ? document.querySelector<HTMLElement>('.workspace-panel-scroll .panel-stack > .panel-card:first-child .panel-card-body') : null
       setPanel(next)
-      setHost(next ? document.querySelector<HTMLElement>('.workspace-panel-scroll .panel-stack > .panel-card:first-child .panel-card-body') : null)
+      setHost(nextHost)
     }
     discover()
     const observer = new MutationObserver(discover)
@@ -236,7 +374,7 @@ export default function FieldPointsTransferInlineFeature() {
   }, [])
 
   useEffect(() => {
-    const sync = () => setCount(readStoredPoints().length)
+    const sync = () => setFieldCount(readStoredPoints().length)
     window.addEventListener(FIELD_POINTS_CHANGED_EVENT, sync)
     window.addEventListener('storage', sync)
     return () => { window.removeEventListener(FIELD_POINTS_CHANGED_EVENT, sync); window.removeEventListener('storage', sync) }
@@ -244,9 +382,44 @@ export default function FieldPointsTransferInlineFeature() {
 
   useEffect(() => {
     if (!message) return
-    const timer = window.setTimeout(() => setMessage(null), 3200)
+    const timer = window.setTimeout(() => setMessage(null), 3600)
     return () => window.clearTimeout(timer)
   }, [message])
+
+  useEffect(() => {
+    if (!host || !panel) return
+    const card = host.closest<HTMLElement>('.panel-card')
+    const heading = card?.querySelector<HTMLElement>('.panel-card-header h2')
+    const subtitle = card?.querySelector<HTMLElement>('.panel-card-header p')
+    const oldHeading = heading?.textContent || ''
+    const oldSubtitle = subtitle?.textContent || ''
+    if (heading) heading.textContent = panel === 'import' ? 'İçe Aktar' : 'Dışa Aktar'
+    if (subtitle) subtitle.textContent = panel === 'import' ? 'Proje verisini tek dosyadan otomatik algıla ve ekle' : 'Poligon, DES ve Saha Noktalarını tek dosyada dışa aktar'
+
+    Array.from(host.children).forEach((child) => {
+      const element = child as HTMLElement
+      if (!element.hasAttribute('data-unified-transfer-root')) element.style.display = 'none'
+    })
+
+    const stack = host.closest<HTMLElement>('.panel-stack')
+    const hideLegacyPreview = () => {
+      if (panel !== 'import' || !stack) return
+      Array.from(stack.querySelectorAll<HTMLElement>(':scope > .panel-card')).forEach((item, index) => {
+        if (index === 0) return
+        if (item.querySelector('h2')?.textContent?.includes('İçe Aktarma Önizlemesi')) item.style.display = 'none'
+      })
+    }
+    hideLegacyPreview()
+    const observer = new MutationObserver(hideLegacyPreview)
+    if (stack) observer.observe(stack, { childList: true, subtree: true })
+
+    return () => {
+      observer.disconnect()
+      Array.from(host.children).forEach((child) => (child as HTMLElement).style.removeProperty('display'))
+      if (heading) heading.textContent = oldHeading
+      if (subtitle) subtitle.textContent = oldSubtitle
+    }
+  }, [host, panel])
 
   const importFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.target
@@ -254,11 +427,22 @@ export default function FieldPointsTransferInlineFeature() {
     if (!file) return
     setReading(true)
     setPending(null)
+    setMessage(null)
     try {
-      const points = await readFieldFile(file)
-      if (!points.length) throw new Error('Dosyada saha noktası bulunamadı.')
-      setPending({ name: file.name, size: file.size, points })
-      setMessage({ text: `${points.length} saha noktası bulundu. Önizlemeyi kontrol edin.` })
+      const lower = file.name.toLowerCase()
+      let layers: PolygonLayer[] = []
+      if (!lower.endsWith('.gpx')) {
+        try { layers = await readSpatialFile(file) } catch { layers = [] }
+      }
+      const fieldPoints = await readFieldPoints(file)
+      if (!layers.length && !fieldPoints.length) throw new Error('Dosyada desteklenen poligon, hat veya Saha Noktası bulunamadı.')
+      setPending({ file, name: file.name, size: file.size, layers, fieldPoints })
+
+      if (layers.length && host) {
+        const originalInput = host.querySelector<HTMLInputElement>('input[type="file"]')
+        if (originalInput) setFileOnInput(originalInput, file)
+      }
+      setMessage({ text: `${layers.length} katman ve ${fieldPoints.length} Saha Noktası bulundu. Önizlemeyi kontrol edin.` })
     } catch (error) {
       setMessage({ text: error instanceof Error ? error.message : 'Dosya okunamadı.', error: true })
     } finally {
@@ -267,68 +451,114 @@ export default function FieldPointsTransferInlineFeature() {
     }
   }
 
-  const confirmImport = () => {
-    if (!pending) return
-    const existing = readStoredPoints()
-    const now = Date.now()
-    const imported = pending.points.map((point, index) => ({ ...point, id: uid(`field-import-${index}`), updatedAt: now }))
-    saveStoredPoints([...existing, ...imported])
-    setCount(existing.length + imported.length)
-    setMessage({ text: `${imported.length} saha noktası eklendi.` })
-    setPending(null)
+  const confirmImport = async () => {
+    if (!pending || !host) return
+    setReading(true)
+    try {
+      if (pending.layers.length) {
+        let confirm = await waitForOriginalConfirm(host)
+        if (!confirm) {
+          const originalInput = host.querySelector<HTMLInputElement>('input[type="file"]')
+          if (originalInput) setFileOnInput(originalInput, pending.file)
+          confirm = await waitForOriginalConfirm(host)
+        }
+        if (!confirm) throw new Error('Mekânsal katmanlar hazırlanamadı. Dosyayı yeniden seçin.')
+        confirm.click()
+      }
+
+      if (pending.fieldPoints.length) {
+        const existing = readStoredPoints()
+        const now = Date.now()
+        const imported = pending.fieldPoints.map((point, index) => ({ ...point, id: uid(`field-import-${index}`), updatedAt: now }))
+        saveStoredPoints([...existing, ...imported])
+        setFieldCount(existing.length + imported.length)
+      }
+
+      setMessage({ text: `${pending.layers.length} katman ve ${pending.fieldPoints.length} Saha Noktası projeye eklendi.` })
+      setPending(null)
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : 'İçe aktarma tamamlanamadı.', error: true })
+    } finally {
+      setReading(false)
+    }
   }
 
-  const currentProjectName = () => {
-    const input = host?.querySelector<HTMLInputElement>('.form-field input')
-    return safeName(input?.value || 'evren-jeofizik-projesi')
-  }
-
-  const exportPlain = (format: 'kml' | 'gpx' | 'geojson') => {
+  const exportProject = async (format: 'kml' | 'kmz' | 'geojson' | 'csv' | 'gpx') => {
+    const polygons = readStoredPolygons()
     const points = readStoredPoints()
-    if (!points.length) return
-    const name = `${currentProjectName()}-saha-noktalari`
-    if (format === 'kml') downloadBlob(pointsToKml(points), `${name}.kml`, 'application/vnd.google-earth.kml+xml;charset=utf-8')
-    if (format === 'gpx') downloadBlob(pointsToGpx(points), `${name}.gpx`, 'application/gpx+xml;charset=utf-8')
-    if (format === 'geojson') downloadBlob(JSON.stringify(pointsToGeoJson(points), null, 2), `${name}.geojson`, 'application/geo+json;charset=utf-8')
-    setMessage({ text: `${points.length} saha noktası ${format.toUpperCase()} olarak hazırlandı.` })
-  }
-
-  const exportKmz = async () => {
-    const points = readStoredPoints()
-    if (!points.length) return
-    const zip = new JSZip()
-    zip.file('doc.kml', pointsToKml(points))
-    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } })
-    downloadBlob(blob, `${currentProjectName()}-saha-noktalari.kmz`)
-    setMessage({ text: `${points.length} saha noktası KMZ olarak hazırlandı.` })
+    const hasData = polygons.some((layer) => layer.points.length || layer.desPoints.length) || points.length > 0
+    if (!hasData) {
+      setMessage({ text: 'Dışa aktarmak için proje verisi ekleyin.', error: true })
+      return
+    }
+    const name = safeName(filename)
+    if (format === 'kml') downloadBlob(combinedKml(polygons, points), `${name}.kml`, 'application/vnd.google-earth.kml+xml;charset=utf-8')
+    if (format === 'kmz') {
+      const zip = new JSZip()
+      zip.file('doc.kml', combinedKml(polygons, points))
+      downloadBlob(await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } }), `${name}.kmz`, 'application/vnd.google-earth.kmz')
+    }
+    if (format === 'geojson') downloadBlob(JSON.stringify(combinedGeoJson(polygons, points), null, 2), `${name}.geojson`, 'application/geo+json;charset=utf-8')
+    if (format === 'csv') downloadBlob(combinedCsv(polygons, points, csvFormat), `${name}.csv`, 'text/csv;charset=utf-8')
+    if (format === 'gpx') downloadBlob(combinedGpx(polygons, points), `${name}.gpx`, 'application/gpx+xml;charset=utf-8')
+    setMessage({ text: `Tüm proje verileri ${format.toUpperCase()} olarak tek dosyada hazırlandı.` })
   }
 
   if (!host || !panel) return null
 
   const status = message ? <p className={`form-note${message.error ? ' warning' : ''}`}>{message.text}</p> : null
-  const commonStyle = <style>{`.field-transfer-inline{display:grid;gap:9px;margin-top:12px;padding-top:12px;border-top:1px solid #e8edf2}.field-transfer-title{display:flex;align-items:center;justify-content:space-between;gap:8px}.field-transfer-title span{display:flex;align-items:center;gap:7px}.field-transfer-title strong{font-size:10px;color:#334155}.field-transfer-title small{font-size:8px;color:#94a3b8}.field-transfer-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.field-transfer-actions button{height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:1px solid #e2e8f0;border-radius:11px;background:#f8fafc;color:#475569;font-size:9px;font-weight:800;cursor:pointer}.field-transfer-actions button:disabled{opacity:.4;cursor:not-allowed}.field-transfer-preview{display:grid;gap:7px;padding:9px;border:1px solid #fde68a;border-radius:11px;background:#fffbeb}.field-transfer-preview-head{display:flex;justify-content:space-between;gap:8px;font-size:9px}.field-transfer-preview-head small{color:#92400e}.field-transfer-preview-list{display:grid;gap:4px}.field-transfer-preview-list span{display:flex;justify-content:space-between;gap:8px;font-size:8px;color:#64748b}.field-transfer-preview-list strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#334155}.field-transfer-confirm{display:flex;gap:7px}.field-transfer-confirm button{flex:1;height:31px;display:flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:8px;font-size:9px;font-weight:800;cursor:pointer}.field-transfer-confirm button:first-child{background:#eef2f6;color:#64748b}.field-transfer-confirm button:last-child{background:#2563eb;color:white}@media(max-width:700px){.field-transfer-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}`}</style>
+  const commonStyle = <style>{`
+    .unified-transfer{display:grid;gap:12px}
+    .unified-transfer-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+    .unified-transfer-summary span{display:grid;gap:2px;padding:8px;border:1px solid #e7edf3;border-radius:10px;background:#f8fafc;text-align:center}
+    .unified-transfer-summary small{font-size:7px;color:#94a3b8}.unified-transfer-summary strong{font-size:11px;color:#334155}
+    .unified-transfer-preview{display:grid;gap:8px;padding:10px;border:1px solid #bfdbfe;border-radius:12px;background:#eff6ff}
+    .unified-transfer-preview-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.unified-transfer-preview-head strong{font-size:10px}.unified-transfer-preview-head small{font-size:8px;color:#64748b}
+    .unified-transfer-preview-list{display:grid;gap:5px}.unified-transfer-preview-list span{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:8px;color:#64748b}.unified-transfer-preview-list b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#334155}
+    .unified-transfer-confirm{display:flex;gap:7px}.unified-transfer-confirm button{flex:1;height:34px;display:flex;align-items:center;justify-content:center;gap:5px;border:0;border-radius:9px;font-size:9px;font-weight:800;cursor:pointer}.unified-transfer-confirm button:first-child{background:#e8eef4;color:#64748b}.unified-transfer-confirm button:last-child{background:#2563eb;color:white}
+    .unified-transfer-field{display:grid;gap:5px}.unified-transfer-field>span{font-size:8px;font-weight:800;color:#64748b}.unified-transfer-field input,.unified-transfer-field select{width:100%;height:40px;padding:0 10px;border:1px solid #dce4ed;border-radius:10px;background:#fff;color:#172033;font-size:10px;outline:none}
+    .unified-export-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.unified-export-grid button{height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:1px solid #dfe7ef;border-radius:11px;background:#f8fafc;color:#475569;font-size:9px;font-weight:800;cursor:pointer}.unified-export-grid button:hover{border-color:#93c5fd;background:#eff6ff;color:#1d4ed8}
+    .unified-transfer-note{margin:0;padding:8px 9px;border-radius:9px;background:#f8fafc;color:#64748b;font-size:8px;line-height:1.45}
+    @media(max-width:700px){.unified-transfer-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.unified-export-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  `}</style>
 
   if (panel === 'import') return createPortal(
-    <section className="field-transfer-inline">
+    <section className="unified-transfer" data-unified-transfer-root="true">
       {commonStyle}
-      <div className="field-transfer-title"><span><MapPinned size={16} /><strong>Saha Noktaları</strong></span><small>KML · KMZ · GPX · GeoJSON</small></div>
-      <label className={`dropzone${reading ? ' is-busy' : ''}`}><Upload size={25} /><strong>{reading ? 'Saha noktaları okunuyor…' : 'Saha noktası dosyası seç'}</strong><small>Mevcut saha noktalarına eklenir</small><input type="file" accept=".kml,.kmz,.gpx,.geojson,.json,application/gpx+xml" onChange={importFile} disabled={reading} /></label>
-      {pending && <div className="field-transfer-preview"><div className="field-transfer-preview-head"><strong>{pending.points.length} saha noktası bulundu</strong><small>{pending.name} · {(pending.size / 1024).toFixed(1)} KB</small></div><div className="field-transfer-preview-list">{pending.points.slice(0, 5).map((point) => <span key={point.id}><strong>{point.name}</strong><small>{point.lat.toFixed(5)}, {point.lng.toFixed(5)}</small></span>)}</div><div className="field-transfer-confirm"><button type="button" onClick={() => setPending(null)}><X size={14} /> Vazgeç</button><button type="button" onClick={confirmImport}><CheckCircle2 size={14} /> Saha Noktalarına Ekle</button></div></div>}
+      <label className={`dropzone tall${reading ? ' is-busy' : ''}`}>
+        <Upload size={32} />
+        <strong>{reading ? 'Proje dosyası analiz ediliyor…' : 'Dosyayı buraya sürükle veya tıkla'}</strong>
+        <small>KML · KMZ · GeoJSON · JSON · CSV · GPX — içerik otomatik algılanır</small>
+        <input type="file" accept=".kml,.kmz,.geojson,.json,.csv,.gpx,text/csv,application/gpx+xml" onChange={importFile} disabled={reading} />
+      </label>
+      {pending && <div className="unified-transfer-preview">
+        <div className="unified-transfer-preview-head"><strong>Tek Dosya Önizlemesi</strong><small>{pending.name} · {(pending.size / 1024).toFixed(1)} KB</small></div>
+        <div className="unified-transfer-summary"><span><small>Katman</small><strong>{pending.layers.length}</strong></span><span><small>Geometri Noktası</small><strong>{pending.layers.reduce((sum, layer) => sum + layer.points.length, 0)}</strong></span><span><small>Saha Noktası</small><strong>{pending.fieldPoints.length}</strong></span><span><small>Toplam</small><strong>{pending.layers.reduce((sum, layer) => sum + layer.points.length, 0) + pending.fieldPoints.length}</strong></span></div>
+        <div className="unified-transfer-preview-list">
+          {pending.layers.slice(0, 4).map((layer) => <span key={layer.id}><b>Katman · {layer.name}</b><small>{layer.points.length} nokta</small></span>)}
+          {pending.fieldPoints.slice(0, 4).map((point) => <span key={point.id}><b>Saha · {point.name}</b><small>{point.lat.toFixed(5)}, {point.lng.toFixed(5)}</small></span>)}
+        </div>
+        <div className="unified-transfer-confirm"><button type="button" onClick={() => setPending(null)} disabled={reading}><X size={14} /> Vazgeç</button><button type="button" onClick={() => void confirmImport()} disabled={reading}><CheckCircle2 size={14} /> Projeye Ekle</button></div>
+      </div>}
+      <p className="unified-transfer-note">Poligon, hat ve Saha Noktaları aynı dosyada bulunabilir. Sistem verileri türüne göre ayırır ve mevcut projeyi silmeden ekler.</p>
       {status}
     </section>, host,
   )
 
   return createPortal(
-    <section className="field-transfer-inline">
+    <section className="unified-transfer" data-unified-transfer-root="true">
       {commonStyle}
-      <div className="field-transfer-title"><span><MapPinned size={16} /><strong>Saha Noktaları</strong></span><small>{count} kayıt · üstteki dosya adı kullanılır</small></div>
-      <div className="field-transfer-actions">
-        <button type="button" disabled={!count} onClick={() => exportPlain('kml')}><FileDown size={17} />KML</button>
-        <button type="button" disabled={!count} onClick={() => void exportKmz()}><FileDown size={17} />KMZ</button>
-        <button type="button" disabled={!count} onClick={() => exportPlain('gpx')}><FileDown size={17} />GPX</button>
-        <button type="button" disabled={!count} onClick={() => exportPlain('geojson')}><FileDown size={17} />GeoJSON</button>
+      <div className="unified-transfer-summary"><span><small>Katman</small><strong>{projectStats.layers}</strong></span><span><small>Koordinat</small><strong>{projectStats.polygonPoints}</strong></span><span><small>DES</small><strong>{projectStats.des}</strong></span><span><small>Saha Noktası</small><strong>{projectStats.field}</strong></span></div>
+      <label className="unified-transfer-field"><span>Dosya adı</span><input value={filename} onChange={(event) => setFilename(event.target.value)} placeholder="evren-jeofizik-projesi" /></label>
+      <label className="unified-transfer-field"><span>CSV Koordinat Formatı</span><select value={csvFormat} onChange={(event) => setCsvFormat(event.target.value as CoordinateFormat)}>{COORDINATE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+      <div className="unified-export-grid">
+        <button type="button" onClick={() => void exportProject('kml')}><FileDown size={19} />KML</button>
+        <button type="button" onClick={() => void exportProject('kmz')}><FileDown size={19} />KMZ</button>
+        <button type="button" onClick={() => void exportProject('geojson')}><FileDown size={19} />GeoJSON</button>
+        <button type="button" onClick={() => void exportProject('csv')}><FileDown size={19} />CSV</button>
+        <button type="button" onClick={() => void exportProject('gpx')}><FileDown size={19} />GPX</button>
       </div>
-      <p className="form-note">Ad, koordinat, sembol, not ve açıklama korunur. Fotoğraflar cihazdaki saha kaydında kalır.</p>
+      <p className="unified-transfer-note">Her düğme tüm proje verisini tek dosyada dışa aktarır: poligon/hat, DES ve Saha Noktaları. Saha noktalarının ad, koordinat, sembol, not ve açıklamaları korunur. Fotoğraflar cihazdaki saha kaydında kalır.</p>
       {status}
     </section>, host,
   )

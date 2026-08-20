@@ -1,4 +1,5 @@
 import { scanCoordinateDocument, type DocumentCoordinateCandidate, type DocumentCoordinateFormat, type DocumentCoordinateOptions, type DocumentScanProgress, type DocumentScanResult } from './documentCoordinates'
+import { scanGeographicCoordinateImage } from './documentCoordinatesGeographicImage'
 import { scanCoordinateDocumentV10 } from './documentCoordinatesV10'
 
 type ProgressHandler = (progress: DocumentScanProgress) => void
@@ -65,7 +66,7 @@ function formatLabel(candidates: DocumentCoordinateCandidate[]) {
 
 function geographicFrom(result: DocumentScanResult) {
   return result.candidates.filter((candidate) =>
-    GEO_FORMATS.has(candidate.format) && candidate.confidence >= 65,
+    GEO_FORMATS.has(candidate.format) && candidate.confidence >= 60,
   )
 }
 
@@ -105,7 +106,21 @@ export async function scanCoordinateDocumentV11(
     return result
   }
 
-  // 3) Düşük güvenli/şüpheli UTM sonucu varsa yalnız bu durumda temel DD/DMS/DDM okuyucusuna geç.
+  // 3) Görsellerde UTM sonucu korunmadıysa orijinal görseli yalnız DD/DMS/DDM karakterlerine odaklanan ayrı OCR ile tara.
+  // Bu katman V10/V9/V8/V7/V6 dosyalarını değiştirmez ve yalnız UTM korunamadığında çalışır.
+  if (file.type.startsWith('image/')) {
+    const imageGeographic = await scanGeographicCoordinateImage(file, options, onProgress)
+    if (imageGeographic) {
+      const geographic = geographicFrom(imageGeographic)
+      if (geographic.length) {
+        const result = geographicResult(imageGeographic, geographic)
+        onProgress({ percent: 100, label: `${result.candidates.length} ${formatLabel(result.candidates)} koordinatı doğrulandı` })
+        return result
+      }
+    }
+  }
+
+  // 4) PDF, DOCX, TXT veya özel OCR'ın sonuç vermediği belgelerde temel DD/DMS/DDM okuyucusunu kullan.
   onProgress({ percent: 4, label: 'DD / DMS / DDM koordinatları kontrol ediliyor…' })
   const generic = await scanCoordinateDocument(file, options, (progress) => {
     onProgress({

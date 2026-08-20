@@ -7,12 +7,14 @@ import './field-points-unified.css'
 import App from './App'
 import FieldPointsFeatureHost from './components/FieldPointsFeatureHost'
 import FieldPointsTransferInlineFeature from './components/FieldPointsTransferInlineFeature'
+import MapAddressSearchFeature from './components/MapAddressSearchFeature'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
     <FieldPointsFeatureHost />
     <FieldPointsTransferInlineFeature />
+    <MapAddressSearchFeature />
   </StrictMode>,
 )
 

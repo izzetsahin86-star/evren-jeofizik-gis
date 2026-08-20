@@ -16,11 +16,15 @@ function normalizeOcrText(text: string) {
     .replace(/[ \t]+/g, ' ')
 }
 
-function hasGeographicCandidates(result: DocumentScanResult) {
-  return result.candidates.some((candidate) =>
+function geographicCandidateCount(result: DocumentScanResult) {
+  return result.candidates.filter((candidate) =>
     (candidate.format === 'Lat/Lon' || candidate.format === 'DMS' || candidate.format === 'DDM')
     && candidate.confidence >= 60,
-  )
+  ).length
+}
+
+function hasGeographicCandidates(result: DocumentScanResult) {
+  return geographicCandidateCount(result) > 0
 }
 
 async function parseRecognizedText(text: string, originalName: string, options: DocumentCoordinateOptions) {
@@ -90,18 +94,39 @@ export async function scanGeographicCoordinateImage(
       preserve_interword_spaces: '1',
     }
 
+    // 1) Dağınık metin ve ekran görüntüleri için ilk geçiş.
     await worker.setParameters({ ...common, tessedit_pageseg_mode: PSM.SPARSE_TEXT })
     const sparse = await worker.recognize(canvas)
-    let parsed = await parseRecognizedText(sparse.data.text ?? '', file.name, options)
-    if (hasGeographicCandidates(parsed)) {
+    const sparseText = sparse.data.text ?? ''
+    let parsed = await parseRecognizedText(sparseText, file.name, options)
+    if (geographicCandidateCount(parsed) >= 8) {
       onProgress({ percent: 100, label: `${parsed.candidates.length} coğrafi koordinat adayı okundu` })
       return parsed
     }
 
-    // Bazı ekran görüntülerinde satır düzeni SPARSE_TEXT ile bölünebilir; AUTO ikinci güvenli denemedir.
+    // 2) Satır düzenini koruyan genel sayfa geçişi.
     await worker.setParameters({ ...common, tessedit_pageseg_mode: PSM.AUTO })
     const automatic = await worker.recognize(canvas)
-    parsed = await parseRecognizedText(`${sparse.data.text ?? ''}\n${automatic.data.text ?? ''}`, file.name, options)
+    const automaticText = automatic.data.text ?? ''
+    parsed = await parseRecognizedText(`${sparseText}\n${automaticText}`, file.name, options)
+    if (geographicCandidateCount(parsed) >= 8) {
+      onProgress({ percent: 100, label: `${parsed.candidates.length} coğrafi koordinat adayı okundu` })
+      return parsed
+    }
+
+    // 3) Kısa koordinat listelerinde (özellikle son satırın atlandığı ekran görüntülerinde)
+    // tüm metin bloğunu tek parça kabul eden son kontrol. UTM akışından tamamen bağımsızdır.
+    await worker.setParameters({ ...common, tessedit_pageseg_mode: PSM.SINGLE_BLOCK })
+    const block = await worker.recognize(canvas)
+    const blockText = block.data.text ?? ''
+    parsed = await parseRecognizedText(`${sparseText}\n${automaticText}\n${blockText}`, file.name, options)
+
+    if (hasGeographicCandidates(parsed)) {
+      parsed.detection.evidence = [
+        ...parsed.detection.evidence,
+        'Kısa koordinat listeleri için son satır kontrolü uygulandı',
+      ]
+    }
     onProgress({ percent: 100, label: `${parsed.candidates.length} coğrafi koordinat adayı okundu` })
     return parsed
   } finally {

@@ -10,7 +10,7 @@ import App from './App'
 import FieldPointsFeatureHost from './components/FieldPointsFeatureHost'
 import FieldPointsTransferInlineFeature from './components/FieldPointsTransferInlineFeature'
 import MapAddressSearchFeatureV2 from './components/MapAddressSearchFeatureV2'
-import DocumentCoordinateFeatureV2 from './components/DocumentCoordinateFeatureV2'
+import DocumentCoordinateFeatureV3 from './components/DocumentCoordinateFeatureV3'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -18,7 +18,7 @@ createRoot(document.getElementById('root')!).render(
     <FieldPointsFeatureHost />
     <FieldPointsTransferInlineFeature />
     <MapAddressSearchFeatureV2 />
-    <DocumentCoordinateFeatureV2 />
+    <DocumentCoordinateFeatureV3 />
   </StrictMode>,
 )
 

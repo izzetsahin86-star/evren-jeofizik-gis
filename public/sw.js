@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'evren-gis-v29'
+const CACHE_VERSION = 'evren-gis-v30'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const TILE_CACHE = `${CACHE_VERSION}-tiles`
 const SHELL_FILES = ['/', '/index.html', '/offline.html', '/manifest.webmanifest', '/icons/evren-gis.svg', '/icons/evren-jeofizik-logo.svg']

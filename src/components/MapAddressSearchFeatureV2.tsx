@@ -108,6 +108,7 @@ export default function MapAddressSearchFeatureV2() {
   const [expanded, setExpanded] = useState(false)
   const [searching, setSearching] = useState(false)
   const [message, setMessage] = useState('')
+  const [anchor, setAnchor] = useState({ left: 16, top: 64 })
   const rootRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const markerRef = useRef<LeafletMarker | null>(null)
@@ -129,6 +130,42 @@ export default function MapAddressSearchFeatureV2() {
       observer.disconnect()
     }
   }, [])
+
+  useEffect(() => {
+    if (!host) return
+    const coordinateStack = host.querySelector<HTMLElement>('.coordinate-stack')
+    if (!coordinateStack) return
+    let frame = 0
+
+    const updateAnchor = () => {
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(() => {
+        const hostRect = host.getBoundingClientRect()
+        const stackRect = coordinateStack.getBoundingClientRect()
+        const next = {
+          left: Math.max(8, Math.round(stackRect.left - hostRect.left)),
+          top: Math.max(8, Math.round(stackRect.bottom - hostRect.top + 6)),
+        }
+        setAnchor((current) => current.left === next.left && current.top === next.top ? current : next)
+      })
+    }
+
+    updateAnchor()
+    const resizeObserver = new ResizeObserver(updateAnchor)
+    resizeObserver.observe(host)
+    resizeObserver.observe(coordinateStack)
+    const mutationObserver = new MutationObserver(updateAnchor)
+    mutationObserver.observe(coordinateStack, { childList: true, subtree: true, attributes: true })
+    mutationObserver.observe(host, { attributes: true, attributeFilter: ['style', 'class'] })
+    window.addEventListener('resize', updateAnchor)
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+      resizeObserver.disconnect()
+      mutationObserver.disconnect()
+      window.removeEventListener('resize', updateAnchor)
+    }
+  }, [host])
 
   useEffect(() => {
     if (!open) return
@@ -314,9 +351,9 @@ export default function MapAddressSearchFeatureV2() {
   ) : null
 
   return createPortal(
-    <div ref={rootRef} className={`map-address-search${open ? ' is-open' : ''}${expanded ? ' has-results' : ''}`}>
+    <div ref={rootRef} className={`map-address-search${open ? ' is-open' : ''}${expanded ? ' has-results' : ''}`} style={{ left: anchor.left, top: anchor.top }}>
       <style>{`
-        .map-address-search{position:absolute;z-index:900;width:38px;font-family:Inter,system-ui,sans-serif;color:#172033;transition:width .16s ease}
+        .map-address-search{position:absolute;z-index:900;width:38px;font-family:Inter,system-ui,sans-serif;color:#172033;transition:width .16s ease,top .16s ease}
         .map-address-search.is-open{width:min(330px,calc(100vw - 300px));min-width:250px}
         .map-address-toggle{width:38px;height:38px;display:grid;place-items:center;border:1px solid rgba(148,163,184,.55);border-radius:12px;background:rgba(255,255,255,.97);color:#334155;box-shadow:0 4px 12px rgba(15,23,42,.2);cursor:pointer}
         .map-address-box{height:38px;display:flex;align-items:center;gap:5px;padding:0 5px 0 10px;border:1px solid rgba(148,163,184,.55);border-radius:12px;background:rgba(255,255,255,.98);box-shadow:0 4px 12px rgba(15,23,42,.2)}
@@ -327,7 +364,7 @@ export default function MapAddressSearchFeatureV2() {
         .map-address-result{width:100%;min-height:42px;display:grid;grid-template-columns:25px minmax(0,1fr) auto;align-items:center;gap:7px;padding:6px 8px;border:0;border-top:1px solid #f0f3f7;background:#fff;text-align:left;cursor:pointer}.map-address-result:hover{background:#f8fbff}.map-address-result-icon{width:25px;height:25px;display:grid;place-items:center;border-radius:8px;background:#eff6ff;color:#2563eb}.map-address-result-copy{min-width:0}.map-address-result-copy strong,.map-address-result-copy small{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.map-address-result-copy strong{font-size:9.5px}.map-address-result-copy small{margin-top:2px;color:#7c8ba0;font-size:7px}.map-address-result em{padding:3px 5px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:7px;font-style:normal;font-weight:800}
         .map-address-message{padding:9px 10px;color:#64748b;font-size:8px;text-align:center}.map-address-attribution{padding:5px 8px;border-top:1px solid #edf1f5;background:#fbfdff;color:#94a3b8;font-size:6.5px;text-align:right}
         .address-search-marker-wrap{background:transparent!important;border:0!important}.address-search-marker{width:34px;height:34px;display:grid;place-items:center;border:3px solid #fff;border-radius:50% 50% 50% 10%;transform:rotate(-45deg);background:#2563eb;color:#fff;box-shadow:0 5px 14px rgba(15,23,42,.32);font-size:18px;font-weight:900}
-        @media(max-width:760px){.map-address-search.is-open{width:min(300px,calc(100vw - 150px));min-width:220px}.map-address-result{grid-template-columns:25px minmax(0,1fr)}.map-address-result em{display:none}}
+        @media(max-width:760px){.map-address-search.is-open{width:min(300px,calc(100vw - 32px));min-width:220px}.map-address-result{grid-template-columns:25px minmax(0,1fr)}.map-address-result em{display:none}}
       `}</style>
       {!open ? (
         <button type="button" className="map-address-toggle" onClick={() => setOpen(true)} aria-label="Adres ara" title="Adres ara"><Search size={17} /></button>

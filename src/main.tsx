@@ -4,12 +4,14 @@ import 'leaflet/dist/leaflet.css'
 import './styles.css'
 import './field-points-layout.css'
 import App from './App'
-import FieldPointsFeature from './components/FieldPointsFeature'
+import FieldPointsFeatureHost from './components/FieldPointsFeatureHost'
+import FieldPointsTransferFeature from './components/FieldPointsTransferFeature'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
-    <FieldPointsFeature />
+    <FieldPointsFeatureHost />
+    <FieldPointsTransferFeature />
   </StrictMode>,
 )
 

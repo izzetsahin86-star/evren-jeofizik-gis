@@ -1,8 +1,15 @@
-import { scanCoordinateDocument, type DocumentCoordinateOptions, type DocumentScanProgress, type DocumentScanResult } from './documentCoordinates'
+import { scanCoordinateDocument, type DocumentCoordinateCandidate, type DocumentCoordinateOptions, type DocumentScanProgress, type DocumentScanResult } from './documentCoordinates'
 
 type ProgressHandler = (progress: DocumentScanProgress) => void
 
+type SupportedCandidate = {
+  candidate: DocumentCoordinateCandidate
+  support: number
+  firstSeen: number
+}
+
 const MAX_OCR_PIXELS = 5_000_000
+const GEO_FORMATS = new Set(['Lat/Lon', 'DMS', 'DDM'])
 
 function normalizeOcrText(text: string) {
   return text
@@ -16,15 +23,105 @@ function normalizeOcrText(text: string) {
     .replace(/[ \t]+/g, ' ')
 }
 
-function geographicCandidateCount(result: DocumentScanResult) {
-  return result.candidates.filter((candidate) =>
-    (candidate.format === 'Lat/Lon' || candidate.format === 'DMS' || candidate.format === 'DDM')
-    && candidate.confidence >= 60,
-  ).length
+function isGeographic(candidate: DocumentCoordinateCandidate) {
+  return GEO_FORMATS.has(candidate.format) && candidate.confidence >= 60
 }
 
-function hasGeographicCandidates(result: DocumentScanResult) {
-  return geographicCandidateCount(result) > 0
+function geographicCandidates(result: DocumentScanResult) {
+  return result.candidates.filter(isGeographic)
+}
+
+function geographicCandidateCount(result: DocumentScanResult) {
+  return geographicCandidates(result).length
+}
+
+function candidateKey(candidate: DocumentCoordinateCandidate) {
+  return `${candidate.format}:${candidate.lat.toFixed(6)}:${candidate.lng.toFixed(6)}`
+}
+
+function sameCoordinate(a: number, b: number) {
+  return Math.abs(a - b) <= 0.000001
+}
+
+function mergeGeographicPasses(results: DocumentScanResult[], originalName: string): DocumentScanResult {
+  const supportMap = new Map<string, SupportedCandidate>()
+  let seenOrder = 0
+
+  results.forEach((result) => {
+    const seenThisPass = new Set<string>()
+    geographicCandidates(result).forEach((candidate) => {
+      const key = candidateKey(candidate)
+      if (seenThisPass.has(key)) return
+      seenThisPass.add(key)
+
+      const current = supportMap.get(key)
+      if (current) {
+        current.support += 1
+        if (candidate.confidence > current.candidate.confidence) current.candidate = candidate
+        return
+      }
+
+      supportMap.set(key, { candidate, support: 1, firstSeen: seenOrder++ })
+    })
+  })
+
+  const entries = Array.from(supportMap.values())
+  const filtered = entries.filter((entry) => {
+    const candidate = entry.candidate
+    if (candidate.format !== 'Lat/Lon' || entry.support > 1) return true
+
+    // OCR geçişleri bazen bir satırın ilk değerini başka bir satırın ilk değeriyle
+    // yanlış çift yapabiliyor. Örn. 40.982910, 41.008238. Aynı enlemin doğru
+    // alternatifi mevcutsa ve şüpheli boylam başka bir noktanın enlemine eşitse ele.
+    const sameLatAlternative = entries.some((other) =>
+      other !== entry
+      && other.candidate.format === 'Lat/Lon'
+      && sameCoordinate(other.candidate.lat, candidate.lat)
+      && !sameCoordinate(other.candidate.lng, candidate.lng)
+      && other.support >= entry.support,
+    )
+    const longitudeMatchesAnotherLatitude = entries.some((other) =>
+      other !== entry
+      && other.candidate.format === 'Lat/Lon'
+      && sameCoordinate(other.candidate.lat, candidate.lng),
+    )
+
+    return !(sameLatAlternative && longitudeMatchesAnotherLatitude)
+  })
+
+  filtered.sort((a, b) => a.firstSeen - b.firstSeen)
+  const candidates = filtered.map((entry, index) => ({
+    ...entry.candidate,
+    id: `doc-geo-image-${index + 1}-${entry.candidate.lat.toFixed(6)}-${entry.candidate.lng.toFixed(6)}`,
+    reasons: [
+      ...entry.candidate.reasons,
+      entry.support > 1 ? `${entry.support} ayrı OCR geçişinde doğrulandı` : 'Tek OCR geçişinden güvenli satır çifti',
+    ],
+  }))
+
+  const base = [...results].sort((a, b) => geographicCandidateCount(b) - geographicCandidateCount(a))[0]
+  return {
+    ...base,
+    fileName: originalName,
+    usedOcr: true,
+    candidates,
+    detection: {
+      ...base.detection,
+      evidence: [
+        ...base.detection.evidence,
+        `${results.length} OCR geçişi ayrı ayrı çözümlendi; metinler birbirine eklenmedi`,
+        'OCR geçişleri arası çapraz sahte koordinat çiftleri elendi',
+      ],
+    },
+    stats: {
+      high: candidates.filter((candidate) => candidate.confidenceLevel === 'high').length,
+      medium: candidates.filter((candidate) => candidate.confidenceLevel === 'medium').length,
+      low: candidates.filter((candidate) => candidate.confidenceLevel === 'low').length,
+      duplicatesRemoved: Math.max(0, entries.length - candidates.length),
+      tableRows: candidates.length,
+    },
+    warning: undefined,
+  }
 }
 
 async function parseRecognizedText(text: string, originalName: string, options: DocumentCoordinateOptions) {
@@ -97,38 +194,35 @@ export async function scanGeographicCoordinateImage(
     // 1) Dağınık metin ve ekran görüntüleri için ilk geçiş.
     await worker.setParameters({ ...common, tessedit_pageseg_mode: PSM.SPARSE_TEXT })
     const sparse = await worker.recognize(canvas)
-    const sparseText = sparse.data.text ?? ''
-    let parsed = await parseRecognizedText(sparseText, file.name, options)
-    if (geographicCandidateCount(parsed) >= 8) {
-      onProgress({ percent: 100, label: `${parsed.candidates.length} coğrafi koordinat adayı okundu` })
-      return parsed
+    const sparseParsed = await parseRecognizedText(sparse.data.text ?? '', file.name, options)
+    if (geographicCandidateCount(sparseParsed) >= 8) {
+      onProgress({ percent: 100, label: `${sparseParsed.candidates.length} coğrafi koordinat adayı okundu` })
+      return sparseParsed
     }
 
-    // 2) Satır düzenini koruyan genel sayfa geçişi.
+    // 2) Satır düzenini koruyan genel sayfa geçişi. Metinler birleştirilmez;
+    // her OCR geçişi ayrı parse edilir ve koordinatlar sonradan güvenli biçimde birleştirilir.
     await worker.setParameters({ ...common, tessedit_pageseg_mode: PSM.AUTO })
     const automatic = await worker.recognize(canvas)
-    const automaticText = automatic.data.text ?? ''
-    parsed = await parseRecognizedText(`${sparseText}\n${automaticText}`, file.name, options)
-    if (geographicCandidateCount(parsed) >= 8) {
-      onProgress({ percent: 100, label: `${parsed.candidates.length} coğrafi koordinat adayı okundu` })
-      return parsed
+    const automaticParsed = await parseRecognizedText(automatic.data.text ?? '', file.name, options)
+    let merged = mergeGeographicPasses([sparseParsed, automaticParsed], file.name)
+    if (geographicCandidateCount(merged) >= 8) {
+      onProgress({ percent: 100, label: `${merged.candidates.length} coğrafi koordinat adayı okundu` })
+      return merged
     }
 
-    // 3) Kısa koordinat listelerinde (özellikle son satırın atlandığı ekran görüntülerinde)
-    // tüm metin bloğunu tek parça kabul eden son kontrol. UTM akışından tamamen bağımsızdır.
+    // 3) Kısa koordinat listelerinde son satır kontrolü.
     await worker.setParameters({ ...common, tessedit_pageseg_mode: PSM.SINGLE_BLOCK })
     const block = await worker.recognize(canvas)
-    const blockText = block.data.text ?? ''
-    parsed = await parseRecognizedText(`${sparseText}\n${automaticText}\n${blockText}`, file.name, options)
+    const blockParsed = await parseRecognizedText(block.data.text ?? '', file.name, options)
+    merged = mergeGeographicPasses([sparseParsed, automaticParsed, blockParsed], file.name)
+    merged.detection.evidence = [
+      ...merged.detection.evidence,
+      'Kısa koordinat listeleri için son satır kontrolü uygulandı',
+    ]
 
-    if (hasGeographicCandidates(parsed)) {
-      parsed.detection.evidence = [
-        ...parsed.detection.evidence,
-        'Kısa koordinat listeleri için son satır kontrolü uygulandı',
-      ]
-    }
-    onProgress({ percent: 100, label: `${parsed.candidates.length} coğrafi koordinat adayı okundu` })
-    return parsed
+    onProgress({ percent: 100, label: `${merged.candidates.length} coğrafi koordinat adayı okundu` })
+    return merged
   } finally {
     await worker.terminate()
     canvas.width = 1

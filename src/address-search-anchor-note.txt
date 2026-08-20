@@ -1,0 +1,1 @@
+Adres arama konumu MapAddressSearchFeatureV2 tarafından koordinat kartı grubunun gerçek yüksekliği ölçülerek dinamik hesaplanır.

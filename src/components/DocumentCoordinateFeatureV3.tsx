@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
 import L, { type FeatureGroup, type Map as LeafletMap } from 'leaflet'
 import { AlertTriangle, CheckCircle2, Eye, FileSearch, FileUp, Plus, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
-import { scanCoordinateDocumentV3 } from '../documentCoordinatesV3'
+import { scanCoordinateDocumentV31 } from '../documentCoordinatesV31'
 import type { DocumentCoordinateCandidate, DocumentScanProgress, DocumentScanResult } from '../documentCoordinates'
 
-const MAP_READY_EVENT = 'evren-document-coordinates-v3-map-ready'
+const MAP_READY_EVENT = 'evren-document-coordinates-v31-map-ready'
 const MAX_PREVIEW_POINTS = 1000
 
 let capturedMap: LeafletMap | null = null
@@ -168,7 +168,7 @@ export default function DocumentCoordinateFeatureV3() {
     setProgress({ percent: 1, label: 'Belge hazırlanıyor…' })
     setStatus({ text: 'Ruhsat tablosu, sütunlar ve koordinat sistemi analiz ediliyor.', tone: 'info' })
     try {
-      const result = await scanCoordinateDocumentV3(file, { zone, hemisphere, datum }, setProgress)
+      const result = await scanCoordinateDocumentV31(file, { zone, hemisphere, datum }, setProgress)
       setScan(result)
       const safeIds = new Set(result.candidates.filter((candidate) => candidate.confidence >= 65).map((candidate) => candidate.id))
       setSelectedIds(safeIds)
@@ -260,7 +260,7 @@ export default function DocumentCoordinateFeatureV3() {
   return createPortal(
     <section className="document-v2-card">
       <header className="document-v2-head">
-        <div className="document-v2-title"><span><FileSearch size={19} /></span><div><strong>Belgeden Koordinat Al 3.0</strong><small>Ruhsat tablosu · Sağa(Y)/Yukarı(X) · OCR · Zone/Datum · harita önizleme</small></div></div>
+        <div className="document-v2-title"><span><FileSearch size={19} /></span><div><strong>Belgeden Koordinat Al 3.1</strong><small>Ruhsat tablosu · Sağa(Y)/Yukarı(X) · OCR hata toleransı · Zone/Datum · harita önizleme</small></div></div>
         {scan && <button type="button" className="document-v2-close" onClick={clearResult} aria-label="Sonucu kapat"><X size={15} /></button>}
       </header>
 
@@ -278,7 +278,7 @@ export default function DocumentCoordinateFeatureV3() {
           <label><span>Yarımküre</span><select value={hemisphere} onChange={(event) => setHemisphere(event.target.value as 'N' | 'S')}><option value="N">Kuzey (N)</option><option value="S">Güney (S)</option></select></label>
           <label><span>Datum</span><select value={datum} onChange={(event) => setDatum(event.target.value)}><option>WGS84</option><option>ED50</option></select></label>
         </div>
-        <p className="document-v2-note"><ShieldCheck size={13} /> Ruhsatlarda Sağa (Y) Easting, Yukarı (X) Northing olarak okunur. Zone belge üzerinde yoksa il bilgisinden tahmin edilir; datum tahmin edilmez.</p>
+        <p className="document-v2-note"><ShieldCheck size={13} /> Ruhsatlarda Sağa (Y) Easting, Yukarı (X) Northing olarak okunur. OCR başlığı yanlış okusa bile (Y)/(X) ve sayı sütunları eşleştirilir. Zone belge üzerinde yoksa il bilgisinden tahmin edilir; datum tahmin edilmez.</p>
 
         {status && <div className={`document-v2-status ${status.tone}`}>{status.text}</div>}
 

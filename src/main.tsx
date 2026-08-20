@@ -8,14 +8,14 @@ import './address-search-position.css'
 import App from './App'
 import FieldPointsFeatureHost from './components/FieldPointsFeatureHost'
 import FieldPointsTransferInlineFeature from './components/FieldPointsTransferInlineFeature'
-import MapAddressSearchFeature from './components/MapAddressSearchFeature'
+import MapAddressSearchFeatureV2 from './components/MapAddressSearchFeatureV2'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
     <FieldPointsFeatureHost />
     <FieldPointsTransferInlineFeature />
-    <MapAddressSearchFeature />
+    <MapAddressSearchFeatureV2 />
   </StrictMode>,
 )
 

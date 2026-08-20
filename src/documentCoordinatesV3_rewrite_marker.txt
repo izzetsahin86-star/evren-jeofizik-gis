@@ -1,1 +1,0 @@
-Belgeden Koordinat Al tablo okuyucu yeniden yazımı öncesi geçici işaretleyici.

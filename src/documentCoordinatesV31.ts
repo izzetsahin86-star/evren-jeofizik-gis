@@ -1,1 +1,1 @@
-export { scanCoordinateDocumentV4 as scanCoordinateDocumentV31 } from './documentCoordinatesV4'
+export { scanCoordinateDocumentV5 as scanCoordinateDocumentV31 } from './documentCoordinatesV5'

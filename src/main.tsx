@@ -5,13 +5,13 @@ import './styles.css'
 import './field-points-layout.css'
 import App from './App'
 import FieldPointsFeatureHost from './components/FieldPointsFeatureHost'
-import FieldPointsTransferFeature from './components/FieldPointsTransferFeature'
+import FieldPointsTransferInlineFeature from './components/FieldPointsTransferInlineFeature'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
     <FieldPointsFeatureHost />
-    <FieldPointsTransferFeature />
+    <FieldPointsTransferInlineFeature />
   </StrictMode>,
 )
 

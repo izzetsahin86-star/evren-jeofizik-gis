@@ -27,6 +27,7 @@ import {
   WifiOff,
   X,
 } from 'lucide-react'
+import { splitBulkCoordinateEntries } from '../coordinateInput'
 import { scanCoordinateDocument, type DocumentScanProgress, type DocumentScanResult } from '../documentCoordinates'
 import {
   analyzePolygon,
@@ -206,9 +207,7 @@ function CoordinatePanel(props: BottomPanelProps) {
   }
 
   const addBulk = () => {
-    const points = bulk.split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith('#'))
+    const points = splitBulkCoordinateEntries(bulk)
       .map((line) => parseCoordinate(line, bulkFormat, { zone, hemisphere, datum }))
       .filter((point): point is Omit<GeoPoint, 'id'> => Boolean(point))
     if (!points.length) {
@@ -369,9 +368,9 @@ function CoordinatePanel(props: BottomPanelProps) {
           <Field label="Datum"><select value={datum} onChange={(event) => setDatum(event.target.value)}><option>WGS84</option><option>ED50</option></select></Field>
         </div>
         <Field label="Koordinatlar">
-          <textarea rows={6} value={bulk} onChange={(event) => setBulk(event.target.value)} placeholder={'# Her satıra bir koordinat\n# Örnek: 500000, 4500000'} />
+          <textarea rows={6} value={bulk} onChange={(event) => setBulk(event.target.value)} placeholder={'# Alt alta veya ; ile yan yana\n500000, 4500000 ; 500200, 4500200'} />
         </Field>
-        <p className="form-note">Her satıra bir koordinat yazın. # ile başlayan satırlar atlanır.</p>
+        <p className="form-note">Koordinatları alt alta veya yan yana yazın. Yan yana noktaları ; ile ayırın. # ile başlayan açıklamalar atlanır.</p>
         <button type="button" className="primary-button purple" onClick={addBulk}><Plus size={18} /> Koordinatları Ekle</button>
       </Card>
 

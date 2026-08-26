@@ -20,6 +20,7 @@ const PERFORMANCE_KEY = 'evren-jeofizik-gis-performance-v1'
 const DISPLAY_KEY = 'evren-jeofizik-gis-display-v2'
 const LEGACY_DISPLAY_KEY = 'evren-jeofizik-gis-display-v1'
 const MTA_INDEX_25_KEY = 'evren-jeofizik-gis-mta-index-25-v1'
+const MTA_INDEX_100_KEY = 'evren-jeofizik-gis-mta-index-100-v1'
 const MIN_CARD_SCALE = 70
 const MAX_CARD_SCALE = 160
 
@@ -96,6 +97,7 @@ export default function App() {
   const [activeId, setActiveId] = useState(() => polygons[0].id)
   const [baseLayer, setBaseLayer] = useState<BaseLayerId>('street')
   const [mtaIndex25Visible, setMtaIndex25Visible] = useState(() => localStorage.getItem(MTA_INDEX_25_KEY) === '1')
+  const [mtaIndex100Visible, setMtaIndex100Visible] = useState(() => localStorage.getItem(MTA_INDEX_100_KEY) === '1')
   const [activePanel, setActivePanel] = useState<DockPanelId | null>(null)
   const [addMode, setAddMode] = useState(false)
   const [fitRequest, setFitRequest] = useState(0)
@@ -132,6 +134,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(MTA_INDEX_25_KEY, mtaIndex25Visible ? '1' : '0')
   }, [mtaIndex25Visible])
+
+  useEffect(() => {
+    localStorage.setItem(MTA_INDEX_100_KEY, mtaIndex100Visible ? '1' : '0')
+  }, [mtaIndex100Visible])
 
   useEffect(() => {
     const updateConnection = () => setIsOnline(navigator.onLine)
@@ -249,6 +255,7 @@ export default function App() {
     setAddMode(false)
     setBaseLayer('street')
     setMtaIndex25Visible(false)
+    setMtaIndex100Visible(false)
     setFitRequest((value) => value + 1)
     message('Çalışma düzeni sıfırlandı.', 'success')
   }
@@ -304,6 +311,7 @@ export default function App() {
         activeId={activeId}
         baseLayer={baseLayer}
         mtaIndex25Visible={mtaIndex25Visible}
+        mtaIndex100Visible={mtaIndex100Visible}
         addMode={addMode}
         panelOpen={Boolean(activePanel)}
         performanceMode={performanceActive}
@@ -325,6 +333,7 @@ export default function App() {
           activeId={activeId}
           baseLayer={baseLayer}
           mtaIndex25Visible={mtaIndex25Visible}
+          mtaIndex100Visible={mtaIndex100Visible}
           performanceMode={performanceMode}
           performanceActive={performanceActive}
           displaySettings={displaySettings}
@@ -332,6 +341,7 @@ export default function App() {
           onClose={() => setActivePanel(null)}
           onSetBaseLayer={setBaseLayer}
           onSetMtaIndex25Visible={setMtaIndex25Visible}
+          onSetMtaIndex100Visible={setMtaIndex100Visible}
           onSetActive={setActiveId}
           onNewPolygon={newPolygon}
           onRenamePolygon={(id, name) => updatePolygons((current) => current.map((layer) => layer.id === id ? { ...layer, name } : layer))}

@@ -297,6 +297,7 @@ interface MapWorkspaceProps {
   activeId: string
   baseLayer: BaseLayerId
   mtaIndex25Visible: boolean
+  mtaIndex100Visible: boolean
   addMode: boolean
   panelOpen: boolean
   performanceMode: boolean
@@ -316,6 +317,7 @@ export default function MapWorkspace({
   activeId,
   baseLayer,
   mtaIndex25Visible,
+  mtaIndex100Visible,
   addMode,
   panelOpen,
   performanceMode,
@@ -512,6 +514,16 @@ export default function MapWorkspace({
             opacity={0.9}
             zIndex={320}
             attribution="© MTA Genel Müdürlüğü · İNDEKS 1/25.000"
+          />
+        ) : null}
+        {mtaIndex100Visible ? (
+          <TileLayer
+            key="mta-index-100"
+            url="https://mtayenicbs-geoserver.mta.gov.tr/geoserver/gwc/service/tms/1.0.0/mta%3AGRD1000@EPSG%3A900913@png/{z}/{x}/{y}.png"
+            tms
+            opacity={0.9}
+            zIndex={310}
+            attribution="© MTA Genel Müdürlüğü · İNDEKS 1/100.000"
           />
         ) : null}
         <EventBridge addMode={addMode} measureMode={measureMode} onAddPoint={onAddPoint} onMeasurePoint={(point) => setMeasurePoints((current) => [...current, point])} positionListener={positionListener} />

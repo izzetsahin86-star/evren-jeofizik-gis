@@ -85,6 +85,7 @@ interface BottomPanelProps {
   activeId: string
   baseLayer: BaseLayerId
   mtaIndex25Visible: boolean
+  mtaIndex100Visible: boolean
   performanceMode: PerformanceMode
   performanceActive: boolean
   displaySettings: DisplaySettings
@@ -92,6 +93,7 @@ interface BottomPanelProps {
   onClose: () => void
   onSetBaseLayer: (layer: BaseLayerId) => void
   onSetMtaIndex25Visible: (visible: boolean) => void
+  onSetMtaIndex100Visible: (visible: boolean) => void
   onSetActive: (id: string) => void
   onNewPolygon: () => void
   onRenamePolygon: (id: string, name: string) => void
@@ -133,6 +135,10 @@ function LayerPanel(props: BottomPanelProps) {
         <label className="setting-toggle">
           <span><strong>İNDEKS 1/25.000</strong><small>Türkiye 1/25.000 ölçekli pafta sınırlarını ve pafta adlarını gösterir.</small></span>
           <input type="checkbox" checked={props.mtaIndex25Visible} onChange={(event) => props.onSetMtaIndex25Visible(event.target.checked)} aria-label="MTA İNDEKS 1/25.000 katmanını göster" />
+        </label>
+        <label className="setting-toggle">
+          <span><strong>İNDEKS 1/100.000</strong><small>Türkiye 1/100.000 ölçekli pafta sınırlarını ve pafta adlarını gösterir.</small></span>
+          <input type="checkbox" checked={props.mtaIndex100Visible} onChange={(event) => props.onSetMtaIndex100Visible(event.target.checked)} aria-label="MTA İNDEKS 1/100.000 katmanını göster" />
         </label>
         <p className="form-note warning"><AlertTriangle size={14} />Kaynak: MTA Genel Müdürlüğü. Görüntüleme amaçlıdır; resmî belge veya teknik çalışma referansı değildir.</p>
       </Card>

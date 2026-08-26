@@ -84,12 +84,14 @@ interface BottomPanelProps {
   polygons: PolygonLayer[]
   activeId: string
   baseLayer: BaseLayerId
+  mtaIndex25Visible: boolean
   performanceMode: PerformanceMode
   performanceActive: boolean
   displaySettings: DisplaySettings
   isOnline: boolean
   onClose: () => void
   onSetBaseLayer: (layer: BaseLayerId) => void
+  onSetMtaIndex25Visible: (visible: boolean) => void
   onSetActive: (id: string) => void
   onNewPolygon: () => void
   onRenamePolygon: (id: string, name: string) => void
@@ -125,6 +127,14 @@ function LayerPanel(props: BottomPanelProps) {
           ]}
           onChange={props.onSetBaseLayer}
         />
+      </Card>
+
+      <Card title="MTA Katmanları" subtitle="MTA Yerbilimleri Harita Görüntüleyicisi" icon={<Grid3X3 size={19} />} tone="amber">
+        <label className="setting-toggle">
+          <span><strong>İNDEKS 1/25.000</strong><small>Türkiye 1/25.000 ölçekli pafta sınırlarını ve pafta adlarını gösterir.</small></span>
+          <input type="checkbox" checked={props.mtaIndex25Visible} onChange={(event) => props.onSetMtaIndex25Visible(event.target.checked)} aria-label="MTA İNDEKS 1/25.000 katmanını göster" />
+        </label>
+        <p className="form-note warning"><AlertTriangle size={14} />Kaynak: MTA Genel Müdürlüğü. Görüntüleme amaçlıdır; resmî belge veya teknik çalışma referansı değildir.</p>
       </Card>
 
       <Card title="Poligon Katmanları" subtitle={`${props.polygons.length} katman`} icon={<CircleDot size={19} />} tone="purple">

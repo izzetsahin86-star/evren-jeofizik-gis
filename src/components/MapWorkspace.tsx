@@ -296,6 +296,7 @@ interface MapWorkspaceProps {
   polygons: PolygonLayer[]
   activeId: string
   baseLayer: BaseLayerId
+  mtaIndex25Visible: boolean
   addMode: boolean
   panelOpen: boolean
   performanceMode: boolean
@@ -314,6 +315,7 @@ export default function MapWorkspace({
   polygons,
   activeId,
   baseLayer,
+  mtaIndex25Visible,
   addMode,
   panelOpen,
   performanceMode,
@@ -502,6 +504,16 @@ export default function MapWorkspace({
     >
       <MapContainer center={MAP_CENTER} zoom={6} zoomControl={false} attributionControl preferCanvas ref={mapRef} className="map-canvas">
         <TileLayer key={baseLayer} url={tileLayers[baseLayer].url} attribution={tileLayers[baseLayer].attribution} />
+        {mtaIndex25Visible ? (
+          <TileLayer
+            key="mta-index-25"
+            url="https://mtayenicbs-geoserver.mta.gov.tr/geoserver/gwc/service/tms/1.0.0/mta%3AGRD25@EPSG%3A900913@png/{z}/{x}/{y}.png"
+            tms
+            opacity={0.9}
+            zIndex={320}
+            attribution="© MTA Genel Müdürlüğü · İNDEKS 1/25.000"
+          />
+        ) : null}
         <EventBridge addMode={addMode} measureMode={measureMode} onAddPoint={onAddPoint} onMeasurePoint={(point) => setMeasurePoints((current) => [...current, point])} positionListener={positionListener} />
         {polygons.map((layer) => <PolygonLayerView key={layer.id} layer={layer} isActive={layer.id === activeId} performanceMode={performanceMode} onUpdatePoint={onUpdatePoint} />)}
 

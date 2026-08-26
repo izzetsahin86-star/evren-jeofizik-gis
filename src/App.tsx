@@ -19,6 +19,7 @@ const LEGACY_PROJECTS_KEY = 'evren-jeofizik-gis-projects-v1'
 const PERFORMANCE_KEY = 'evren-jeofizik-gis-performance-v1'
 const DISPLAY_KEY = 'evren-jeofizik-gis-display-v2'
 const LEGACY_DISPLAY_KEY = 'evren-jeofizik-gis-display-v1'
+const MTA_INDEX_25_KEY = 'evren-jeofizik-gis-mta-index-25-v1'
 const MIN_CARD_SCALE = 70
 const MAX_CARD_SCALE = 160
 
@@ -94,6 +95,7 @@ export default function App() {
   const [polygons, setPolygonsState] = useState<PolygonLayer[]>(readWorkspace)
   const [activeId, setActiveId] = useState(() => polygons[0].id)
   const [baseLayer, setBaseLayer] = useState<BaseLayerId>('street')
+  const [mtaIndex25Visible, setMtaIndex25Visible] = useState(() => localStorage.getItem(MTA_INDEX_25_KEY) === '1')
   const [activePanel, setActivePanel] = useState<DockPanelId | null>(null)
   const [addMode, setAddMode] = useState(false)
   const [fitRequest, setFitRequest] = useState(0)
@@ -126,6 +128,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(DISPLAY_KEY, JSON.stringify(displaySettings))
   }, [displaySettings])
+
+  useEffect(() => {
+    localStorage.setItem(MTA_INDEX_25_KEY, mtaIndex25Visible ? '1' : '0')
+  }, [mtaIndex25Visible])
 
   useEffect(() => {
     const updateConnection = () => setIsOnline(navigator.onLine)
@@ -242,6 +248,7 @@ export default function App() {
     setActivePanel(null)
     setAddMode(false)
     setBaseLayer('street')
+    setMtaIndex25Visible(false)
     setFitRequest((value) => value + 1)
     message('Çalışma düzeni sıfırlandı.', 'success')
   }
@@ -296,6 +303,7 @@ export default function App() {
         polygons={polygons}
         activeId={activeId}
         baseLayer={baseLayer}
+        mtaIndex25Visible={mtaIndex25Visible}
         addMode={addMode}
         panelOpen={Boolean(activePanel)}
         performanceMode={performanceActive}
@@ -316,12 +324,14 @@ export default function App() {
           polygons={polygons}
           activeId={activeId}
           baseLayer={baseLayer}
+          mtaIndex25Visible={mtaIndex25Visible}
           performanceMode={performanceMode}
           performanceActive={performanceActive}
           displaySettings={displaySettings}
           isOnline={isOnline}
           onClose={() => setActivePanel(null)}
           onSetBaseLayer={setBaseLayer}
+          onSetMtaIndex25Visible={setMtaIndex25Visible}
           onSetActive={setActiveId}
           onNewPolygon={newPolygon}
           onRenamePolygon={(id, name) => updatePolygons((current) => current.map((layer) => layer.id === id ? { ...layer, name } : layer))}

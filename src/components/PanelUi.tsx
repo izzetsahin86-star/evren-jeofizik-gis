@@ -1,14 +1,25 @@
 import type { ReactNode } from 'react'
+import { X } from 'lucide-react'
 
 export function Card({ title, subtitle, icon, tone = 'blue', children, className = '' }: { title: string; subtitle?: string; icon?: ReactNode; tone?: 'blue' | 'purple' | 'amber' | 'green'; children: ReactNode; className?: string }) {
   return (
-    <section className={`panel-card ${className}`}>
+    <section className={`panel-card panel-tone-${tone} ${className}`}>
       <header className="panel-card-header">
         {icon && <span className={`card-icon tone-${tone}`}>{icon}</span>}
         <span><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</span>
       </header>
       <div className="panel-card-body">{children}</div>
     </section>
+  )
+}
+
+export function SheetHeader({ title, subtitle, icon, tone = 'blue', onClose }: { title: string; subtitle: string; icon: ReactNode; tone?: 'blue' | 'purple' | 'amber' | 'green'; onClose: () => void }) {
+  return (
+    <div className={`smart-sheet-header smart-sheet-header-${tone}`}>
+      <span className="smart-sheet-heading-icon">{icon}</span>
+      <span className="smart-sheet-heading-copy"><strong>{title}</strong><small>{subtitle}</small></span>
+      <button type="button" onClick={onClose} aria-label={`${title} panelini kapat`}><X size={20} /></button>
+    </div>
   )
 }
 

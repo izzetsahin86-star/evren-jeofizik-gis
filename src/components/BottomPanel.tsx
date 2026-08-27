@@ -51,7 +51,7 @@ import { exportProjectPdf } from '../report'
 import type { BaseLayerId, CoordinateFormat, DisplaySettings, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer } from '../types'
 import { DEFAULT_EXPORT_POLYGON_STYLE } from '../exportStyle'
 import ExportPolygonStyleControls from './ExportPolygonStyleControls'
-import { Card, EmptyState, Field, Segmented } from './PanelUi'
+import { Card, EmptyState, Field, Segmented, SheetHeader } from './PanelUi'
 
 const coordinateOptions: Array<{ value: CoordinateFormat; label: string }> = [
   { value: 'utm', label: 'UTM' },
@@ -67,6 +67,33 @@ const panelTitles: Record<PanelId, string> = {
   import: 'İçe Aktar',
   export: 'Dışa Aktar',
   settings: 'Ayarla',
+}
+
+const panelDescriptions: Record<PanelId, string> = {
+  layers: 'Harita, MTA ve çalışma katmanları',
+  coordinates: 'Nokta ekleme ve koordinat yönetimi',
+  tools: 'DES, ölçüm ve dönüşüm araçları',
+  import: 'Mekânsal dosyaları haritaya ekle',
+  export: 'Veri ve kurumsal rapor oluştur',
+  settings: 'Görünüm ve çalışma tercihleri',
+}
+
+const panelTones: Record<PanelId, 'blue' | 'purple' | 'amber' | 'green'> = {
+  layers: 'blue',
+  coordinates: 'purple',
+  tools: 'amber',
+  import: 'green',
+  export: 'blue',
+  settings: 'purple',
+}
+
+function panelIcon(panel: PanelId) {
+  if (panel === 'layers') return <Layers3 size={22} />
+  if (panel === 'coordinates') return <MapPin size={22} />
+  if (panel === 'tools') return <Grid3X3 size={22} />
+  if (panel === 'import') return <FileUp size={22} />
+  if (panel === 'export') return <Download size={22} />
+  return <SlidersHorizontal size={22} />
 }
 
 type VisibilitySetting = Exclude<keyof DisplaySettings, 'cardScale'>
@@ -728,8 +755,8 @@ function SettingsPanel(props: BottomPanelProps) {
 
 export default function BottomPanel(props: BottomPanelProps) {
   return (
-    <aside className="smart-sheet" aria-label={panelTitles[props.panel]}>
-      <div className="smart-sheet-header"><span>{panelTitles[props.panel]}</span><button type="button" onClick={props.onClose} aria-label="Paneli kapat"><X size={19} /></button></div>
+    <aside className={`smart-sheet smart-sheet-${props.panel}`} aria-label={panelTitles[props.panel]}>
+      <SheetHeader title={panelTitles[props.panel]} subtitle={panelDescriptions[props.panel]} icon={panelIcon(props.panel)} tone={panelTones[props.panel]} onClose={props.onClose} />
       <div className="smart-sheet-body">
         {props.panel === 'layers' && <LayerPanel {...props} />}
         {props.panel === 'coordinates' && <CoordinatePanel {...props} />}

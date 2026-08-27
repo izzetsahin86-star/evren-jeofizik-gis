@@ -30,31 +30,46 @@
 .field-points-panel .field-points-body{
   display:block !important;
   overflow:auto;
-  padding:0 !important;
-  background:#fff !important;
+  padding:10px !important;
+  background:linear-gradient(180deg,#e9f0f6,#f6f9fb) !important;
 }
 
 .field-points-panel .field-card{
-  border:0 !important;
-  border-radius:0 !important;
-  box-shadow:none !important;
-  background:#fff;
+  margin-bottom:10px;
+  border:1px solid rgba(203,213,225,.84) !important;
+  border-radius:19px !important;
+  box-shadow:0 7px 22px rgba(15,23,42,.075) !important;
+  background:rgba(255,255,255,.97);
 }
 
 .field-points-panel .field-card + .field-card{
-  border-top:1px solid #e5ebf2 !important;
+  border-top:1px solid rgba(203,213,225,.84) !important;
 }
 
 .field-points-panel .field-card > header{
-  min-height:42px;
-  padding:10px 14px !important;
-  background:#f8fafc;
+  min-height:52px;
+  padding:11px 13px !important;
+  background:linear-gradient(110deg,#eef8ff,#fff 62%);
   border-bottom:1px solid #edf2f7 !important;
 }
 
 .field-points-panel .field-card-body{
-  padding:13px 14px !important;
+  padding:13px !important;
 }
+
+.field-points-panel .field-input input,
+.field-points-panel .field-input textarea{min-height:48px !important;border-radius:13px !important;border-color:#d5dfe9 !important;}
+.field-points-panel .field-location-actions button,
+.field-points-panel .field-primary,
+.field-points-panel .field-secondary,
+.field-points-panel .field-danger{height:48px !important;border-radius:14px !important;transition:transform .14s ease,box-shadow .18s ease;}
+.field-points-panel .field-location-actions button:active,
+.field-points-panel .field-primary:active,
+.field-points-panel .field-secondary:active,
+.field-points-panel .field-danger:active{transform:scale(.95);}
+.field-points-panel .field-symbol{min-height:54px !important;border-radius:13px !important;transition:transform .14s ease,box-shadow .18s ease;}
+.field-points-panel .field-symbol:active{transform:scale(.92);}
+.field-points-panel .field-symbol.is-active{box-shadow:0 0 0 3px rgba(59,130,246,.1),0 0 18px rgba(59,130,246,.12) !important;}
 
 .field-points-panel .field-grid{
   grid-template-columns:1fr 1fr;
@@ -84,7 +99,7 @@
     grid-template-columns:1fr !important;
   }
   .field-points-panel .field-card-body{
-    padding:11px 10px !important;
+    padding:12px 10px !important;
   }
   .field-points-panel .field-input input,
   .field-points-panel .field-input textarea{min-height:46px !important;border-radius:12px !important;}

@@ -5,7 +5,6 @@ import {
   BellRing,
   CircleGauge,
   Compass,
-  Crosshair,
   LocateFixed,
   MapPinned,
   Navigation,
@@ -16,15 +15,12 @@ import {
   RotateCw,
   Route,
   Satellite,
-  ShieldCheck,
   Square,
   Target,
-  Timer,
   Trash2,
-  X,
 } from 'lucide-react'
 import type { PolygonLayer } from '../types'
-import { Card, Field } from './PanelUi'
+import { Card, Field, SheetHeader } from './PanelUi'
 
 const TRACK_STORAGE_KEY = 'evren-jeofizik-gis-live-track-v1'
 const LIVE_META_KEY = 'evren-jeofizik-gis-live-meta-v2'
@@ -637,30 +633,34 @@ export default function LiveLocationPanel({
         .smart-location-controls button[aria-label="Canlı konum takibini başlat"],
         .smart-location-controls button[aria-label="Canlı konum takibini durdur"],
         .smart-location-controls button[aria-label="Canlı takip izini temizle"]{display:none!important}
-        .live-location-panel .smart-sheet-body{padding-bottom:118px}
-        .live-feature-number{width:22px;height:22px;display:inline-grid;place-items:center;border-radius:7px;background:#e7f6ef;color:#087a50;font-size:10px;font-weight:900}
+        .live-location-panel .smart-sheet-body{padding-bottom:28px}
+        .live-feature-number{width:34px;height:34px;display:inline-grid;place-items:center;border:1px solid rgba(16,185,129,.22);border-radius:12px;background:#e7f8f0;color:#087a50;box-shadow:0 0 16px rgba(16,185,129,.12);font-size:11px;font-weight:900}
         .live-status-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
-        .live-status-cell{min-width:0;padding:8px;border:1px solid #edf1f5;border-radius:11px;background:#fafcfe}
+        .live-status-cell{min-width:0;min-height:56px;display:grid;align-content:center;padding:9px;border:1px solid #e1e9f0;border-radius:14px;background:linear-gradient(145deg,#f7fafc,#fff);box-shadow:0 3px 10px rgba(15,23,42,.04)}
         .live-status-cell small{display:block;color:#8a97a8;font-size:8px;margin-bottom:3px}
         .live-status-cell strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;font-variant-numeric:tabular-nums}
         .live-action-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px}
-        .live-action-grid button,.live-wide-button{min-height:34px;display:flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:10px;background:#eef3f7;color:#4f6075;font-size:10px;font-weight:750;cursor:pointer}
-        .live-action-grid button.primary,.live-wide-button.primary{color:#fff;background:#159465}
-        .live-action-grid button.stop{color:#fff;background:#e05252}
-        .live-action-grid button.blue,.live-wide-button.blue{color:#fff;background:#2877dc}
+        .live-action-grid button,.live-wide-button{min-height:48px;display:flex;align-items:center;justify-content:center;gap:7px;border:1px solid #dce5ed;border-radius:14px;background:#f3f7fa;color:#4f6075;font-size:10px;font-weight:800;cursor:pointer;transition:transform .14s ease,box-shadow .18s ease}
+        .live-action-grid button:active,.live-wide-button:active{transform:scale(.94)}
+        .live-action-grid button.primary,.live-wide-button.primary{color:#fff;border-color:#159465;background:linear-gradient(135deg,#22b47d,#07845a);box-shadow:0 6px 16px rgba(5,150,105,.2)}
+        .live-action-grid button.stop{color:#fff;border-color:#e05252;background:linear-gradient(135deg,#f06a6a,#d83f4c)}
+        .live-action-grid button.blue,.live-wide-button.blue{color:#fff;border-color:#2877dc;background:linear-gradient(135deg,#3b8bea,#2563c9)}
         .live-action-grid button:disabled,.live-wide-button:disabled{opacity:.4;cursor:not-allowed}
         .live-inline-note{display:flex;align-items:flex-start;gap:6px;margin:8px 0 0;color:#7b899b;font-size:9px;line-height:1.4}
         .live-inline-note.warning{color:#a76216}
-        .live-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:8px 0;border-top:1px solid #edf1f5}
+        .live-toggle-row{min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:9px;padding:9px 10px;margin-top:7px;border:1px solid #e1e9f0!important;border-radius:14px;background:#f8fafc}
         .live-toggle-row:first-of-type{border-top:0}
         .live-toggle-row span{display:grid;gap:2px}
         .live-toggle-row strong{font-size:10px}.live-toggle-row small{color:#8795a7;font-size:8px}
-        .live-toggle-row input[type="checkbox"]{width:17px;height:17px;accent-color:#159465}
-        .live-signal{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-radius:11px;background:#eef9f4;color:#087a50}
+        .live-toggle-row input[type="checkbox"]{appearance:none;position:relative;flex:0 0 auto;width:46px;height:28px;border:0;border-radius:999px;background:#cbd5e1;cursor:pointer;transition:background .18s ease,box-shadow .18s ease}
+        .live-toggle-row input[type="checkbox"]:after{content:'';position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(15,23,42,.22);transition:transform .18s ease}
+        .live-toggle-row input[type="checkbox"]:checked{background:#16a679;box-shadow:0 0 14px rgba(16,166,121,.26)}
+        .live-toggle-row input[type="checkbox"]:checked:after{transform:translateX(18px)}
+        .live-signal{min-height:56px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid #d6eee3;border-radius:15px;background:#eef9f4;color:#087a50}
         .live-signal.weak{background:#fff6df;color:#a76500}.live-signal.lost{background:#fff0f0;color:#b83b3b}
         .live-signal span{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:800}.live-signal small{font-size:8px;color:inherit;opacity:.8}
         .live-progress{height:7px;overflow:hidden;border-radius:999px;background:#edf1f5;margin-top:8px}.live-progress span{display:block;height:100%;background:#2877dc}
-        .live-route-status{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}.live-route-status span{padding:7px;border-radius:9px;background:#f7f9fb}.live-route-status small{display:block;color:#8b97a7;font-size:8px}.live-route-status strong{font-size:10px}
+        .live-route-status{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}.live-route-status span{min-height:52px;display:grid;align-content:center;padding:8px;border:1px solid #e3eaf1;border-radius:13px;background:#f7f9fb}.live-route-status small{display:block;color:#8b97a7;font-size:8px}.live-route-status strong{font-size:10px}
         .live-target-card{display:grid;grid-template-columns:76px 1fr;gap:10px;align-items:center;margin-top:9px;padding:9px;border-radius:12px;background:#f7fbff;border:1px solid #e3edf7}
         .live-target-arrow{width:72px;height:72px;display:grid;place-items:center;border-radius:50%;border:1px solid #d8e5f1;background:#fff;position:relative}
         .live-target-arrow svg{color:#2877dc;transform:rotate(var(--target-bearing,0deg));transition:transform .2s linear}
@@ -671,12 +671,12 @@ export default function LiveLocationPanel({
         .live-compass-copy{display:grid;gap:7px}.live-compass-copy strong{font-size:18px}.live-compass-copy small{color:#8492a4;font-size:9px;line-height:1.4}
         .live-nav-overlay{pointer-events:none;position:absolute;z-index:530;left:50%;top:92px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid rgba(219,231,243,.95);border-radius:999px;background:rgba(255,255,255,.94);box-shadow:0 6px 18px rgba(15,23,42,.13);font-size:10px;font-weight:800;backdrop-filter:blur(10px)}
         .live-nav-overlay svg{color:#2877dc;transform:rotate(var(--nav-bearing,0deg));transition:transform .2s linear}.live-nav-overlay small{font-size:8px;color:#7c899b;font-weight:700}
-        @media(max-width:620px){.live-status-row{grid-template-columns:repeat(2,minmax(0,1fr))}.live-route-status{grid-template-columns:1fr 1fr}.live-compass{grid-template-columns:82px 1fr}.live-compass-dial{width:78px;height:78px}.live-compass-needle{height:30px;margin-top:-27px;transform-origin:50% 27px}}
+        @media(max-width:620px){.live-status-row{grid-template-columns:repeat(2,minmax(0,1fr))}.live-route-status{grid-template-columns:1fr 1fr}.live-compass{grid-template-columns:82px 1fr}.live-compass-dial{width:78px;height:78px}.live-compass-needle{height:30px;margin-top:-27px;transform-origin:50% 27px}.live-location-panel .smart-sheet-body{padding-bottom:26px}}
       `}</style>
 
       {active && (
         <aside className="smart-sheet live-location-panel" aria-label="Canlı Konum">
-          <div className="smart-sheet-header"><span>Canlı Konum</span><button type="button" onClick={onClose} aria-label="Paneli kapat"><X size={19} /></button></div>
+          <SheetHeader title="Canlı Konum" subtitle="GPS, rota ve saha navigasyonu" icon={<Satellite size={22} />} tone="green" onClose={onClose} />
           <div className="smart-sheet-body">
             <div className="panel-stack">
               <Card title="Arka Plan GPS" subtitle="Saha takibini mümkün olduğunca kesintisiz tutar" icon={numberBadge(1)} tone="green">

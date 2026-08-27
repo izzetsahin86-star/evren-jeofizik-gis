@@ -1,7 +1,7 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from 'react'
 import L, { type LeafletMouseEvent, type Map as LeafletMap } from 'leaflet'
 import { Circle, CircleMarker, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, useMapEvents } from 'react-leaflet'
-import { Check, Copy, Crosshair, LocateFixed, MousePointer2, Navigation, Ruler, Square, Trash2, Undo2 } from 'lucide-react'
+import { Check, Copy, Crosshair, LocateFixed, MousePointer2, Navigation, Plus, Ruler, Square, Trash2, Undo2 } from 'lucide-react'
 import { analyzePolygon, formatAreaShort, formatNumber, MAP_CENTER, pointBearing, pointDistance, toUtm, utmLatitudeBand } from '../geo'
 import type { BaseLayerId, DisplaySettings, GeoPoint, PolygonLayer } from '../types'
 
@@ -106,12 +106,12 @@ interface EventBridgeProps {
 
 function EventBridge({ addMode, measureMode, onAddPoint, onMeasurePoint, positionListener }: EventBridgeProps) {
   const pendingPosition = useRef<MapPosition | null>(null)
-  const timer = useRef<number | null>(null)
+  const positionFrame = useRef<number | null>(null)
   const coarsePointer = useRef(window.matchMedia('(pointer: coarse)').matches)
 
   const flushPosition = useCallback(() => {
-    if (timer.current !== null) window.clearTimeout(timer.current)
-    timer.current = null
+    if (positionFrame.current !== null) window.cancelAnimationFrame(positionFrame.current)
+    positionFrame.current = null
     if (!pendingPosition.current) return
     positionListener.current(pendingPosition.current)
     pendingPosition.current = null
@@ -119,7 +119,7 @@ function EventBridge({ addMode, measureMode, onAddPoint, onMeasurePoint, positio
 
   const queuePosition = useCallback((point: MapPosition) => {
     pendingPosition.current = point
-    if (timer.current === null) timer.current = window.setTimeout(flushPosition, 80)
+    if (positionFrame.current === null) positionFrame.current = window.requestAnimationFrame(flushPosition)
   }, [flushPosition])
 
   const map = useMapEvents({
@@ -153,7 +153,7 @@ function EventBridge({ addMode, measureMode, onAddPoint, onMeasurePoint, positio
   }, [map, positionListener])
 
   useEffect(() => () => {
-    if (timer.current !== null) window.clearTimeout(timer.current)
+    if (positionFrame.current !== null) window.cancelAnimationFrame(positionFrame.current)
   }, [])
 
   return null
@@ -590,7 +590,7 @@ export default function MapWorkspace({
           {trackPoints.length > 0 && !tracking && <button type="button" className="locate-button tone-rose" onClick={clearTrack} aria-label="Canlı takip izini temizle" title="Takip izini temizle"><Trash2 size={18} /></button>}
         </div>
       )}
-      <div className="map-crosshair" aria-hidden="true"><Crosshair size={24} strokeWidth={1.4} /></div>
+      <div className="map-crosshair" aria-hidden="true"><Plus size={28} strokeWidth={1.8} /></div>
     </main>
   )
 }

@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Calculator,
   CheckCircle2,
-  ChevronDown,
   CircleDot,
   Copy,
   Download,
@@ -729,9 +728,9 @@ function SettingsPanel(props: BottomPanelProps) {
 
 export default function BottomPanel(props: BottomPanelProps) {
   return (
-    <aside className="workspace-panel" aria-label={panelTitles[props.panel]}>
-      <div className="workspace-panel-title"><span>{panelTitles[props.panel]}</span><button type="button" onClick={props.onClose} aria-label="Paneli kapat"><X size={19} /></button></div>
-      <div className="workspace-panel-scroll">
+    <aside className="smart-sheet" aria-label={panelTitles[props.panel]}>
+      <div className="smart-sheet-header"><span>{panelTitles[props.panel]}</span><button type="button" onClick={props.onClose} aria-label="Paneli kapat"><X size={19} /></button></div>
+      <div className="smart-sheet-body">
         {props.panel === 'layers' && <LayerPanel {...props} />}
         {props.panel === 'coordinates' && <CoordinatePanel {...props} />}
         {props.panel === 'tools' && <ToolsPanel {...props} />}
@@ -739,7 +738,6 @@ export default function BottomPanel(props: BottomPanelProps) {
         {props.panel === 'export' && <ExportPanel {...props} />}
         {props.panel === 'settings' && <SettingsPanel {...props} />}
       </div>
-      <div className="panel-resize-cue"><ChevronDown size={15} /></div>
     </aside>
   )
 }

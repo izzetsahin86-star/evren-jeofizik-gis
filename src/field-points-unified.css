@@ -1,13 +1,31 @@
 .field-points-panel{
   width:min(720px,calc(100vw - 24px)) !important;
   max-height:min(78vh,780px) !important;
+  bottom:calc(var(--smart-dock-height) + max(18px, env(safe-area-inset-bottom))) !important;
+  border-color:rgba(148,163,184,.3) !important;
+  border-radius:24px !important;
+  box-shadow:0 22px 64px rgba(2,8,23,.32) !important;
 }
 
 .field-points-panel .field-points-head{
   position:sticky;
   top:0;
   z-index:2;
+  min-height:58px;
+  color:#f8fafc;
+  border-bottom-color:rgba(148,163,184,.16) !important;
+  background:linear-gradient(135deg,#0b1628,#173454) !important;
 }
+
+.field-points-panel .field-points-title > span{
+  color:#7dd3fc !important;
+  background:rgba(14,165,233,.17) !important;
+  box-shadow:0 0 18px rgba(56,189,248,.16);
+}
+
+.field-points-panel .field-points-title small{color:#8fa3bb !important;}
+.field-points-panel .field-points-count{color:#86efac !important;background:rgba(34,197,94,.14) !important;}
+.field-points-panel .field-points-close{width:40px !important;height:40px !important;border-radius:13px !important;color:#cbd5e1 !important;background:rgba(255,255,255,.08) !important;}
 
 .field-points-panel .field-points-body{
   display:block !important;
@@ -58,8 +76,9 @@
 
 @media(max-width:760px){
   .field-points-panel{
-    width:calc(100vw - 12px) !important;
-    max-height:80vh !important;
+    width:calc(100vw - 10px) !important;
+    max-height:74dvh !important;
+    border-radius:26px !important;
   }
   .field-points-panel .field-grid{
     grid-template-columns:1fr !important;
@@ -67,4 +86,11 @@
   .field-points-panel .field-card-body{
     padding:11px 10px !important;
   }
+  .field-points-panel .field-input input,
+  .field-points-panel .field-input textarea{min-height:46px !important;border-radius:12px !important;}
+  .field-points-panel .field-location-actions button,
+  .field-points-panel .field-primary,
+  .field-points-panel .field-secondary,
+  .field-points-panel .field-danger{height:46px !important;border-radius:13px !important;}
+  .field-points-panel .field-row-actions button{width:40px !important;height:40px !important;border-radius:12px !important;}
 }

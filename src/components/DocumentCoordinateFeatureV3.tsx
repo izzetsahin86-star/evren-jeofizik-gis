@@ -71,7 +71,7 @@ export default function DocumentCoordinateFeatureV3() {
 
   useEffect(() => {
     const discover = () => {
-      const stack = document.querySelector<HTMLElement>('.workspace-panel-scroll .panel-stack')
+      const stack = document.querySelector<HTMLElement>('.smart-sheet-body .panel-stack')
       const legacy = findCard('Belgeden Koordinat Al')
       if (!stack || !legacy) {
         setHost(null)

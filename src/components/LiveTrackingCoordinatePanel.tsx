@@ -63,7 +63,7 @@ function liveButton(kind: 'start' | 'stop' | 'clear') {
       ? ['Canlı konum takibini durdur', 'Canlı takibi durdur']
       : ['Canlı takip izini temizle', 'Takip izini temizle']
 
-  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('.location-controls button'))
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('.smart-location-controls button'))
   return buttons.find((button) => labels.includes(button.getAttribute('aria-label') || '') || labels.includes(button.getAttribute('title') || '')) ?? null
 }
 
@@ -85,7 +85,7 @@ export default function LiveTrackingCoordinatePanel({
     let retries = 0
 
     const mount = () => {
-      const stack = document.querySelector<HTMLElement>('.workspace-panel-scroll .panel-stack')
+      const stack = document.querySelector<HTMLElement>('.smart-sheet-body .panel-stack')
       if (!active || !stack) {
         if (active && retries < 20) {
           retries += 1
@@ -127,7 +127,7 @@ export default function LiveTrackingCoordinatePanel({
       setTracking(Boolean(liveButton('stop')))
       setNow(Date.now())
 
-      const controls = document.querySelector<HTMLElement>('.location-controls')
+      const controls = document.querySelector<HTMLElement>('.smart-location-controls')
       if (!controls) return
       for (const button of Array.from(controls.querySelectorAll<HTMLButtonElement>('button'))) {
         const label = `${button.getAttribute('aria-label') || ''} ${button.getAttribute('title') || ''}`
@@ -144,7 +144,7 @@ export default function LiveTrackingCoordinatePanel({
     return () => {
       window.clearInterval(timer)
       observer.disconnect()
-      const controls = document.querySelector<HTMLElement>('.location-controls')
+      const controls = document.querySelector<HTMLElement>('.smart-location-controls')
       if (!controls) return
       for (const button of Array.from(controls.querySelectorAll<HTMLButtonElement>('button'))) button.style.display = ''
       const accuracy = controls.querySelector<HTMLElement>('.gps-accuracy')

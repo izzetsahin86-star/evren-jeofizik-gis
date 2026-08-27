@@ -30,9 +30,9 @@ async function captureMapImage() {
       logging: false,
       scale: Math.min(1.5, window.devicePixelRatio || 1),
       ignoreElements: (element) => [
-        'map-mode-actions',
+        'smart-map-tools',
         'coordinate-card',
-        'measurement-card',
+        'smart-measurement-sheet',
         'locate-button',
         'gps-accuracy',
         'map-crosshair',

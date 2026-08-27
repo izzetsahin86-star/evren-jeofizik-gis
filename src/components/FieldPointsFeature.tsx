@@ -260,7 +260,7 @@ export default function FieldPointsFeature() {
   const currentEditingPoint = useMemo(() => points.find((point) => point.id === editingId) ?? null, [points, editingId])
 
   useEffect(() => {
-    const discover = () => setDockHost(document.querySelector<HTMLElement>('.bottom-dock'))
+    const discover = () => setDockHost(document.querySelector<HTMLElement>('.smart-dock-extra'))
     discover()
     const observer = new MutationObserver(discover)
     observer.observe(document.body, { childList: true, subtree: true })
@@ -277,7 +277,7 @@ export default function FieldPointsFeature() {
   useEffect(() => {
     const onDocumentClick = (event: MouseEvent) => {
       const target = event.target as Element | null
-      const dockButton = target?.closest('.bottom-dock button')
+      const dockButton = target?.closest('.smart-dock button, .smart-dock-menu button')
       if (dockButton && !dockButton.hasAttribute('data-field-points-button')) setOpen(false)
     }
     document.addEventListener('click', onDocumentClick, true)
@@ -515,8 +515,9 @@ export default function FieldPointsFeature() {
   }
 
   const togglePanel = () => {
+    window.dispatchEvent(new Event('evren-smart-more-close'))
     if (!open) {
-      const active = dockHost?.querySelector<HTMLButtonElement>('button.is-active:not([data-field-points-button])')
+      const active = document.querySelector<HTMLButtonElement>('.smart-dock button.is-active[data-panel-id], .smart-dock-menu button.is-active[data-panel-id]')
       active?.click()
       if (!form.lat && map) {
         const center = map.getCenter()
@@ -530,13 +531,13 @@ export default function FieldPointsFeature() {
     <button
       type="button"
       data-field-points-button="true"
-      className={open ? 'is-active' : ''}
+      className={`smart-overflow-action${open ? ' is-active' : ''}`}
       onClick={togglePanel}
       aria-label="Saha noktaları"
       title="Saha noktaları"
     >
-      <MapPinned size={22} />
-      <span>Saha</span>
+      <span><MapPinned size={20} strokeWidth={1.9} /></span>
+      <strong>Saha Noktaları</strong>
     </button>,
     dockHost,
   ) : null

@@ -1,14 +1,35 @@
-import { Download, Layers3, MapPin, Navigation, Settings2, Upload, Wrench, type LucideIcon } from 'lucide-react'
+import {
+  Ellipsis,
+  FileInput,
+  FileOutput,
+  Layers2,
+  MapPinned,
+  Radio,
+  SlidersHorizontal,
+  Waypoints,
+  type LucideIcon,
+} from 'lucide-react'
 import type { PanelId } from './types'
 
 export type DockPanelId = PanelId | 'live'
 
-export const dockItems: Array<{ id: DockPanelId; label: string; icon: LucideIcon }> = [
-  { id: 'layers', label: 'Katmanlar', icon: Layers3 },
-  { id: 'coordinates', label: 'Koordinat', icon: MapPin },
-  { id: 'live', label: 'Canlı', icon: Navigation },
-  { id: 'tools', label: 'Araçlar', icon: Wrench },
-  { id: 'import', label: 'İçe Aktar', icon: Upload },
-  { id: 'export', label: 'Dışa Aktar', icon: Download },
-  { id: 'settings', label: 'Ayarla', icon: Settings2 },
+export interface DockItem {
+  id: DockPanelId
+  label: string
+  icon: LucideIcon
+}
+
+export const primaryDockItems: DockItem[] = [
+  { id: 'layers', label: 'Katman', icon: Layers2 },
+  { id: 'coordinates', label: 'Koordinat', icon: MapPinned },
+  { id: 'live', label: 'Canlı', icon: Radio },
+  { id: 'tools', label: 'Araçlar', icon: Waypoints },
 ]
+
+export const secondaryDockItems: DockItem[] = [
+  { id: 'import', label: 'İçe Aktar', icon: FileInput },
+  { id: 'export', label: 'Dışa Aktar', icon: FileOutput },
+  { id: 'settings', label: 'Ayarlar', icon: SlidersHorizontal },
+]
+
+export const MoreDockIcon = Ellipsis

@@ -363,10 +363,10 @@ export default function FieldPointsTransferInlineFeature() {
 
   useEffect(() => {
     const discover = () => {
-      const active = document.querySelector<HTMLButtonElement>('.bottom-dock button.is-active[data-panel-id]')
+      const active = document.querySelector<HTMLButtonElement>('.smart-dock button.is-active[data-panel-id], .smart-dock-menu button.is-active[data-panel-id]')
       const id = active?.dataset.panelId
       const next = id === 'import' || id === 'export' ? id : null
-      const nextHost = next ? document.querySelector<HTMLElement>('.workspace-panel-scroll .panel-stack > .panel-card:first-child .panel-card-body') : null
+      const nextHost = next ? document.querySelector<HTMLElement>('.smart-sheet-body .panel-stack > .panel-card:first-child .panel-card-body') : null
       setPanel(next)
       setHost(nextHost)
     }

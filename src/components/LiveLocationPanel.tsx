@@ -213,7 +213,7 @@ function liveButton(kind: 'start' | 'stop' | 'clear') {
     : kind === 'stop'
       ? ['Canlı konum takibini durdur', 'Canlı takibi durdur']
       : ['Canlı takip izini temizle', 'Takip izini temizle']
-  return Array.from(document.querySelectorAll<HTMLButtonElement>('.location-controls button'))
+  return Array.from(document.querySelectorAll<HTMLButtonElement>('.smart-location-controls button'))
     .find((button) => labels.includes(button.getAttribute('aria-label') || '') || labels.includes(button.getAttribute('title') || '')) ?? null
 }
 
@@ -634,15 +634,10 @@ export default function LiveLocationPanel({
   return (
     <>
       <style>{`
-        .bottom-dock{width:min(590px,calc(100vw - 18px));grid-template-columns:repeat(7,minmax(0,1fr));padding-left:6px;padding-right:6px}
-        .bottom-dock button{min-width:0;padding-left:2px;padding-right:2px}
-        .bottom-dock button span{max-width:100%;overflow:hidden;text-overflow:ellipsis}
-        .bottom-dock button[data-panel-id="live"].is-active{color:#07855b;background:linear-gradient(180deg,#dcf8ea,#effcf6)}
-        .bottom-dock button[data-panel-id="tools"].is-active{color:#de8f05;background:linear-gradient(180deg,#fff4ce,#fff9e8)}
-        .location-controls button[aria-label="Canlı konum takibini başlat"],
-        .location-controls button[aria-label="Canlı konum takibini durdur"],
-        .location-controls button[aria-label="Canlı takip izini temizle"]{display:none!important}
-        .live-location-panel .workspace-panel-scroll{padding-bottom:112px}
+        .smart-location-controls button[aria-label="Canlı konum takibini başlat"],
+        .smart-location-controls button[aria-label="Canlı konum takibini durdur"],
+        .smart-location-controls button[aria-label="Canlı takip izini temizle"]{display:none!important}
+        .live-location-panel .smart-sheet-body{padding-bottom:118px}
         .live-feature-number{width:22px;height:22px;display:inline-grid;place-items:center;border-radius:7px;background:#e7f6ef;color:#087a50;font-size:10px;font-weight:900}
         .live-status-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
         .live-status-cell{min-width:0;padding:8px;border:1px solid #edf1f5;border-radius:11px;background:#fafcfe}
@@ -676,13 +671,13 @@ export default function LiveLocationPanel({
         .live-compass-copy{display:grid;gap:7px}.live-compass-copy strong{font-size:18px}.live-compass-copy small{color:#8492a4;font-size:9px;line-height:1.4}
         .live-nav-overlay{pointer-events:none;position:absolute;z-index:530;left:50%;top:92px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid rgba(219,231,243,.95);border-radius:999px;background:rgba(255,255,255,.94);box-shadow:0 6px 18px rgba(15,23,42,.13);font-size:10px;font-weight:800;backdrop-filter:blur(10px)}
         .live-nav-overlay svg{color:#2877dc;transform:rotate(var(--nav-bearing,0deg));transition:transform .2s linear}.live-nav-overlay small{font-size:8px;color:#7c899b;font-weight:700}
-        @media(max-width:620px){.bottom-dock button{font-size:9px}.bottom-dock button svg{width:19px;height:19px}.live-status-row{grid-template-columns:repeat(2,minmax(0,1fr))}.live-route-status{grid-template-columns:1fr 1fr}.live-compass{grid-template-columns:82px 1fr}.live-compass-dial{width:78px;height:78px}.live-compass-needle{height:30px;margin-top:-27px;transform-origin:50% 27px}}
+        @media(max-width:620px){.live-status-row{grid-template-columns:repeat(2,minmax(0,1fr))}.live-route-status{grid-template-columns:1fr 1fr}.live-compass{grid-template-columns:82px 1fr}.live-compass-dial{width:78px;height:78px}.live-compass-needle{height:30px;margin-top:-27px;transform-origin:50% 27px}}
       `}</style>
 
       {active && (
-        <aside className="workspace-panel live-location-panel" aria-label="Canlı Konum">
-          <div className="workspace-panel-title"><span>Canlı Konum</span><button type="button" onClick={onClose} aria-label="Paneli kapat"><X size={19} /></button></div>
-          <div className="workspace-panel-scroll">
+        <aside className="smart-sheet live-location-panel" aria-label="Canlı Konum">
+          <div className="smart-sheet-header"><span>Canlı Konum</span><button type="button" onClick={onClose} aria-label="Paneli kapat"><X size={19} /></button></div>
+          <div className="smart-sheet-body">
             <div className="panel-stack">
               <Card title="Arka Plan GPS" subtitle="Saha takibini mümkün olduğunca kesintisiz tutar" icon={numberBadge(1)} tone="green">
                 <div className={`live-signal${signalLost ? ' lost' : signalWeak ? ' weak' : ''}`}>

@@ -1,16 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  Expand,
-  Move,
-  Redo2,
-  Trash2,
-  Undo2,
-  X,
-} from 'lucide-react'
+import { X } from 'lucide-react'
 import BottomPanel from './components/BottomPanel'
 import LiveLocationPanel from './components/LiveLocationPanel'
 import MapWorkspace from './components/MapWorkspace'
-import { dockItems, type DockPanelId } from './dock'
+import SmartDock from './components/SmartDock'
+import SmartHeader from './components/SmartHeader'
+import type { DockPanelId } from './dock'
 import { DEFAULT_POLYGON_APPEARANCE, POLYGON_COLORS, analyzePolygon, formatAreaShort, uid } from './geo'
 import type { BaseLayerId, DisplaySettings, GeoPoint, PerformanceMode, PolygonAppearance, PolygonLayer } from './types'
 
@@ -276,35 +271,24 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <div className="brand">
-          <img className="brand-logo" src="/icons/evren-jeofizik-logo.svg" alt="Evren Jeofizik logosu" />
-          <strong>Evren Jeofizik <span>GIS</span></strong>
-        </div>
-        <div className="header-actions">
-          {displaySettings.headerStats && (
-            <>
-              <span className="stat-pill violet">{polygons.length} pol</span>
-              <span className="stat-pill blue">{totalPoints} pkt</span>
-              {activeAnalysis.areaM2 > 0 && <span className="stat-pill green">{formatAreaShort(activeAnalysis.areaM2)}</span>}
-              <i className="header-divider" />
-            </>
-          )}
-          <button type="button" onClick={undo} disabled={!undoStack.current.length} aria-label="Geri al"><Undo2 size={17} /></button>
-          <button type="button" onClick={redo} disabled={!redoStack.current.length} aria-label="Yinele"><Redo2 size={17} /></button>
-          <button type="button" onClick={resetWorkspace} aria-label="Düzeni sıfırla" title="Düzeni sıfırla"><Move size={17} /></button>
-          <button type="button" onClick={() => setFitRequest((value) => value + 1)} aria-label="Poligona yakınlaş"><Expand size={17} /></button>
-          <button type="button" className="danger" onClick={() => mutateActive((layer) => ({ ...layer, points: [], desPoints: [] }))} aria-label="Aktif poligonu temizle"><Trash2 size={17} /></button>
-        </div>
-      </header>
-
-      <div className="active-strip">
-        <span className="strip-color" style={{ background: active?.color }} />
-        <strong>{active?.name ?? 'Poligon'}</strong>
-        <span>{active?.points.length ?? 0} nokta</span>
-        {performanceActive && <span className="strip-status performance">Hızlı mod</span>}
-        <span className={`strip-status ${isOnline ? 'online' : 'offline'}`}>{isOnline ? 'Çevrimiçi' : 'Çevrimdışı'}</span>
-      </div>
+      <SmartHeader
+        showStats={displaySettings.headerStats}
+        polygonCount={polygons.length}
+        pointCount={totalPoints}
+        areaLabel={activeAnalysis.areaM2 > 0 ? formatAreaShort(activeAnalysis.areaM2) : null}
+        activeName={active?.name ?? 'Poligon'}
+        activeColor={active?.color ?? '#1597e5'}
+        activePointCount={active?.points.length ?? 0}
+        isOnline={isOnline}
+        performanceActive={performanceActive}
+        canUndo={Boolean(undoStack.current.length)}
+        canRedo={Boolean(redoStack.current.length)}
+        onUndo={undo}
+        onRedo={redo}
+        onReset={resetWorkspace}
+        onFit={() => setFitRequest((value) => value + 1)}
+        onClearActive={() => mutateActive((layer) => ({ ...layer, points: [], desPoints: [] }))}
+      />
 
       <MapWorkspace
         polygons={polygons}
@@ -374,14 +358,9 @@ export default function App() {
         onMessage={message}
       />
 
-      <nav className="bottom-dock" aria-label="Çalışma araçları">
-        {dockItems.map((item) => {
-          const Icon = item.icon
-          return <button key={item.id} data-panel-id={item.id} type="button" className={activePanel === item.id ? 'is-active' : ''} onClick={() => setActivePanel((current) => current === item.id ? null : item.id)}><Icon size={22} /><span>{item.label}</span></button>
-        })}
-      </nav>
+      <SmartDock activePanel={activePanel} onSelect={(panel) => setActivePanel((current) => current === panel ? null : panel)} />
 
-      {toast && <div key={toast.id} className={`toast ${toast.tone}`}><span>{toast.message}</span><button type="button" onClick={() => setToast(null)} aria-label="Bildirimi kapat"><X size={14} /></button></div>}
+      {toast && <div key={toast.id} className={`smart-toast ${toast.tone}`}><span>{toast.message}</span><button type="button" onClick={() => setToast(null)} aria-label="Bildirimi kapat"><X size={14} /></button></div>}
     </div>
   )
 }

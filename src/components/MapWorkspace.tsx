@@ -556,15 +556,15 @@ export default function MapWorkspace({
       <CoordinateCard positionListener={positionListener} areaM2={analysis.areaM2} showCoordinate={displaySettings.coordinateCard} showArea={displaySettings.areaCard} />
 
       {displaySettings.mapActions && (
-        <div className="map-mode-actions">
-          <button type="button" className={addMode ? 'is-active' : ''} onClick={() => { if (measureMode) setMeasureMode(false); onToggleAddMode() }}><MousePointer2 size={17} /> {addMode ? 'Haritaya Tıklayın' : 'Tıkla & Ekle'}</button>
-          <button type="button" onClick={addTargetPoint}><Crosshair size={17} /> Hedeften Ekle</button>
-          <button type="button" className={measureMode ? 'is-measuring' : ''} onClick={toggleMeasurement}><Ruler size={17} /> {measureMode ? 'Ölçüm Açık' : 'Serbest Ölç'}</button>
+        <div className="smart-map-tools">
+          <button type="button" className={addMode ? 'is-active' : ''} onClick={() => { if (measureMode) setMeasureMode(false); onToggleAddMode() }} aria-label={addMode ? 'Haritaya nokta ekleme açık' : 'Haritaya tıklayarak nokta ekle'} title={addMode ? 'Haritaya Tıklayın' : 'Tıkla ve Ekle'}><MousePointer2 size={19} /><span>{addMode ? 'Ekleme Açık' : 'Tıkla & Ekle'}</span></button>
+          <button type="button" onClick={addTargetPoint} aria-label="Hedef merkezinden nokta ekle" title="Hedeften Ekle"><Crosshair size={19} /><span>Hedeften Ekle</span></button>
+          <button type="button" className={measureMode ? 'is-measuring' : ''} onClick={toggleMeasurement} aria-label={measureMode ? 'Serbest ölçüm açık' : 'Serbest ölçümü başlat'} title={measureMode ? 'Ölçüm Açık' : 'Serbest Ölç'}><Ruler size={19} /><span>{measureMode ? 'Ölçüm Açık' : 'Serbest Ölç'}</span></button>
         </div>
       )}
 
       {displaySettings.measurementCard && measureMode && (
-        <section className="measurement-card" aria-live="polite">
+        <section className="smart-measurement-sheet" aria-live="polite">
           <header><span><Ruler size={16} /> Serbest Ölçüm</span><strong>{measurePoints.length} nokta</strong></header>
           <div><span><small>Mesafe</small><strong>{formatNumber(measurement.distanceM, 2)} m</strong></span><span><small>Son Azimut</small><strong>{measurement.bearing === null ? '—' : `${formatNumber(measurement.bearing, 2)}°`}</strong></span>{measurePoints.length >= 3 && <span><small>Alan</small><strong>{formatAreaShort(measurement.areaM2)}</strong></span>}</div>
           <footer><button type="button" onClick={() => setMeasurePoints((current) => current.slice(0, -1))} disabled={!measurePoints.length}><Undo2 size={14} /> Geri</button><button type="button" onClick={() => setMeasurePoints([])} disabled={!measurePoints.length}><Trash2 size={14} /> Temizle</button><button type="button" onClick={() => setMeasureMode(false)}>Bitir</button></footer>
@@ -572,7 +572,7 @@ export default function MapWorkspace({
       )}
 
       {displaySettings.locationCard && (
-        <div className="location-controls">
+        <div className="smart-location-controls">
           <button type="button" className={`locate-button${gpsPosition ? ' has-fix' : ''}`} onClick={locate} aria-label="Mevcut konumum" title="Mevcut konumu bir kez bul"><LocateFixed size={22} /></button>
           <button type="button" className={`locate-button${tracking ? ' has-fix' : ''}`} onClick={() => tracking ? stopTracking() : startTracking()} aria-label={tracking ? 'Canlı konum takibini durdur' : 'Canlı konum takibini başlat'} title={tracking ? 'Canlı takibi durdur' : 'Canlı takibi başlat'}>{tracking ? <Square size={18} fill="currentColor" /> : <Navigation size={21} />}</button>
           {gpsPosition && <span className="gps-accuracy">±{formatNumber(gpsPosition.accuracy, 0)} m{tracking || trackPoints.length ? ` · ${tracking ? 'CANLI · ' : ''}${trackPoints.length} pkt · ${formatTrackDistance(trackDistanceM)}` : ''}</span>}

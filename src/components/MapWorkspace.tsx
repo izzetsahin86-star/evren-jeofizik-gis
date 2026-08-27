@@ -85,71 +85,114 @@ function numberIcon(number: number, color: string, active: boolean) {
   })
 }
 
-async function copyShareText(text: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text)
-    return
-  }
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.style.position = 'fixed'
-  textarea.style.opacity = '0'
-  document.body.appendChild(textarea)
-  textarea.select()
-  document.execCommand('copy')
-  textarea.remove()
+function escapeKml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
 }
 
-async function shareMapText(
+function kmlColor(hex: string, opacity = 1) {
+  const normalized = hex.replace('#', '').padEnd(6, '0').slice(0, 6)
+  const red = normalized.slice(0, 2)
+  const green = normalized.slice(2, 4)
+  const blue = normalized.slice(4, 6)
+  const alpha = Math.round(Math.max(0, Math.min(1, opacity)) * 255).toString(16).padStart(2, '0')
+  return `${alpha}${blue}${green}${red}`
+}
+
+function safeKmlName(value: string) {
+  return value.trim().replace(/[^a-zA-Z0-9ğüşöçıİĞÜŞÖÇ_-]+/g, '-') || 'evren-jeofizik'
+}
+
+function downloadKml(file: File) {
+  const url = URL.createObjectURL(file)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = file.name
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+async function shareKmlFile(
   title: string,
-  text: string,
+  filename: string,
+  kml: string,
   onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void,
 ) {
+  const file = new File([kml], `${safeKmlName(filename)}.kml`, { type: 'application/vnd.google-earth.kml+xml' })
   try {
-    if (navigator.share) {
-      await navigator.share({ title, text })
-      onMessage('Paylaşım tamamlandı.', 'success')
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ title, text: `${title} · Evren Jeofizik GIS`, files: [file] })
+      onMessage('KML paylaşımı tamamlandı.', 'success')
       return
     }
-    await copyShareText(text)
-    onMessage('Paylaşım bilgisi panoya kopyalandı.', 'success')
+    downloadKml(file)
+    onMessage('KML dosyası indirildi.', 'success')
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') return
     try {
-      await copyShareText(text)
-      onMessage('Paylaşım bilgisi panoya kopyalandı.', 'success')
+      downloadKml(file)
+      onMessage('KML dosyası indirildi.', 'success')
     } catch {
-      onMessage('Paylaşım başlatılamadı.', 'error')
+      onMessage('KML paylaşımı başlatılamadı.', 'error')
     }
   }
 }
 
-function pointShareText(layer: PolygonLayer, point: GeoPoint, index: number) {
+function pointKml(layer: PolygonLayer, point: GeoPoint, index: number) {
   const zone = Math.max(1, Math.min(60, Math.floor((point.lng + 180) / 6) + 1))
   const hemisphere: 'N' | 'S' = point.lat >= 0 ? 'N' : 'S'
   const utm = toUtm(point.lat, point.lng, zone, hemisphere)
-  return [
-    `${layer.name} · Nokta ${index + 1}`,
-    `Enlem / Boylam: ${point.lat.toFixed(7)}, ${point.lng.toFixed(7)}`,
-    `UTM: ${zone}${hemisphere} ${Math.round(utm.easting)} ${Math.round(utm.northing)}`,
-    `Haritada aç: https://www.google.com/maps?q=${point.lat.toFixed(7)},${point.lng.toFixed(7)}`,
-    'Evren Jeofizik GIS',
-  ].join('\n')
+  const name = `${layer.name} · Nokta ${index + 1}`
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${escapeKml(name)}</name>
+    <Style id="yellow-pin">
+      <IconStyle><scale>1.1</scale><Icon><href>https://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href></Icon></IconStyle>
+      <LabelStyle><scale>0.9</scale></LabelStyle>
+    </Style>
+    <Placemark>
+      <name>${escapeKml(name)}</name>
+      <description>${escapeKml(`Enlem/Boylam: ${point.lat.toFixed(7)}, ${point.lng.toFixed(7)} | UTM: ${zone}${hemisphere} ${Math.round(utm.easting)} ${Math.round(utm.northing)}`)}</description>
+      <styleUrl>#yellow-pin</styleUrl>
+      <ExtendedData>
+        <Data name="latitude"><value>${point.lat.toFixed(7)}</value></Data>
+        <Data name="longitude"><value>${point.lng.toFixed(7)}</value></Data>
+        <Data name="utm"><value>${zone}${hemisphere} ${Math.round(utm.easting)} ${Math.round(utm.northing)}</value></Data>
+      </ExtendedData>
+      <Point><coordinates>${point.lng.toFixed(8)},${point.lat.toFixed(8)},0</coordinates></Point>
+    </Placemark>
+  </Document>
+</kml>`
 }
 
-function polygonShareText(layer: PolygonLayer) {
+function polygonKml(layer: PolygonLayer) {
   const analysis = analyzePolygon(layer.points)
-  const coordinates = layer.points.map((point, index) => `${index + 1}. ${point.lat.toFixed(7)}, ${point.lng.toFixed(7)}`)
-  return [
-    layer.name,
-    `${layer.points.length} nokta`,
-    analysis.areaM2 > 0 ? `Alan: ${formatAreaShort(analysis.areaM2)}` : '',
-    '',
-    'Koordinatlar:',
-    ...coordinates,
-    '',
-    'Evren Jeofizik GIS',
-  ].filter((line, index) => line || index > 2).join('\n')
+  const geometry = layer.points.length >= 3
+    ? `<Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>${[...layer.points, layer.points[0]].map((point) => `${point.lng.toFixed(8)},${point.lat.toFixed(8)},0`).join(' ')}</coordinates></LinearRing></outerBoundaryIs></Polygon>`
+    : `<LineString><tessellate>1</tessellate><coordinates>${layer.points.map((point) => `${point.lng.toFixed(8)},${point.lat.toFixed(8)},0`).join(' ')}</coordinates></LineString>`
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${escapeKml(layer.name)}</name>
+    <Style id="polygon-style">
+      <LineStyle><color>${kmlColor(layer.color, layer.strokeOpacity ?? 1)}</color><width>${layer.strokeWidth ?? 3}</width></LineStyle>
+      <PolyStyle><color>${kmlColor(layer.color, layer.fillOpacity ?? 0.14)}</color><fill>1</fill><outline>1</outline></PolyStyle>
+    </Style>
+    <Placemark>
+      <name>${escapeKml(layer.name)}</name>
+      <description>${escapeKml(`${layer.points.length} nokta${analysis.areaM2 > 0 ? ` | Alan: ${formatAreaShort(analysis.areaM2)}` : ''} | Evren Jeofizik GIS`)}</description>
+      <styleUrl>#polygon-style</styleUrl>
+      ${geometry}
+    </Placemark>
+  </Document>
+</kml>`
 }
 
 function desIcon() {
@@ -333,7 +376,7 @@ const PolygonLayerView = memo(function PolygonLayerView({
               <span className="map-share-kind">Poligon</span>
               <strong>{layer.name}</strong>
               <small>{layer.points.length} nokta · {formatAreaShort(polygonAreaM2)}</small>
-              <button type="button" onClick={() => void shareMapText(layer.name, polygonShareText(layer), onMessage)}><Share2 size={16} /> Poligonu Paylaş</button>
+              <button type="button" onClick={() => void shareKmlFile(layer.name, layer.name, polygonKml(layer), onMessage)}><Share2 size={16} /> Poligonu KML Olarak Paylaş</button>
             </div>
           </Popup>
         </Polygon>
@@ -344,7 +387,7 @@ const PolygonLayerView = memo(function PolygonLayerView({
               <span className="map-share-kind">Hat</span>
               <strong>{layer.name}</strong>
               <small>{layer.points.length} nokta</small>
-              <button type="button" onClick={() => void shareMapText(layer.name, polygonShareText(layer), onMessage)}><Share2 size={16} /> Hattı Paylaş</button>
+              <button type="button" onClick={() => void shareKmlFile(layer.name, layer.name, polygonKml(layer), onMessage)}><Share2 size={16} /> Hattı KML Olarak Paylaş</button>
             </div>
           </Popup>
         </Polyline>
@@ -372,7 +415,7 @@ const PolygonLayerView = memo(function PolygonLayerView({
                 <span className="map-share-kind">Koordinat noktası</span>
                 <strong>{layer.name} · Nokta {index + 1}</strong>
                 <small>{point.lat.toFixed(7)}, {point.lng.toFixed(7)}</small>
-                <button type="button" onClick={() => void shareMapText(`${layer.name} · Nokta ${index + 1}`, pointShareText(layer, point, index), onMessage)}><Share2 size={16} /> Noktayı Paylaş</button>
+                <button type="button" onClick={() => void shareKmlFile(`${layer.name} · Nokta ${index + 1}`, `${layer.name}-nokta-${index + 1}`, pointKml(layer, point, index), onMessage)}><Share2 size={16} /> Noktayı KML Olarak Paylaş</button>
               </div>
             </Popup>
           </Marker>

@@ -1,7 +1,7 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from 'react'
 import L, { type LeafletMouseEvent, type Map as LeafletMap } from 'leaflet'
-import { Circle, CircleMarker, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, useMapEvents } from 'react-leaflet'
-import { Check, Copy, Crosshair, LocateFixed, MousePointer2, Plus, Ruler, Trash2, Undo2 } from 'lucide-react'
+import { Circle, CircleMarker, MapContainer, Marker, Polygon, Polyline, Popup, TileLayer, Tooltip, useMapEvents } from 'react-leaflet'
+import { Check, Copy, Crosshair, LocateFixed, MousePointer2, Plus, Ruler, Share2, Trash2, Undo2 } from 'lucide-react'
 import { analyzePolygon, formatAreaShort, formatNumber, MAP_CENTER, pointBearing, pointDistance, toUtm, utmLatitudeBand } from '../geo'
 import { LIVE_TRACK_COMMAND_EVENT, sendLiveTrackStatus, type LiveTrackCommand } from '../liveTrackingBridge'
 import type { BaseLayerId, DisplaySettings, GeoPoint, PolygonLayer } from '../types'
@@ -77,10 +77,79 @@ function formatTrackDistance(distanceM: number) {
 function numberIcon(number: number, color: string, active: boolean) {
   return L.divIcon({
     className: 'map-number-marker-wrap',
-    html: `<span class="map-number-marker${active ? ' is-active' : ''}" style="--marker:${color}">${number}</span>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
+    html: `<span class="map-pin-marker${active ? ' is-active' : ''}" style="--marker:${color}"><span>${number}</span></span>`,
+    iconSize: [34, 40],
+    iconAnchor: [17, 38],
+    popupAnchor: [0, -34],
+    tooltipAnchor: [0, -28],
   })
+}
+
+async function copyShareText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand('copy')
+  textarea.remove()
+}
+
+async function shareMapText(
+  title: string,
+  text: string,
+  onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void,
+) {
+  try {
+    if (navigator.share) {
+      await navigator.share({ title, text })
+      onMessage('Paylaşım tamamlandı.', 'success')
+      return
+    }
+    await copyShareText(text)
+    onMessage('Paylaşım bilgisi panoya kopyalandı.', 'success')
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return
+    try {
+      await copyShareText(text)
+      onMessage('Paylaşım bilgisi panoya kopyalandı.', 'success')
+    } catch {
+      onMessage('Paylaşım başlatılamadı.', 'error')
+    }
+  }
+}
+
+function pointShareText(layer: PolygonLayer, point: GeoPoint, index: number) {
+  const zone = Math.max(1, Math.min(60, Math.floor((point.lng + 180) / 6) + 1))
+  const hemisphere: 'N' | 'S' = point.lat >= 0 ? 'N' : 'S'
+  const utm = toUtm(point.lat, point.lng, zone, hemisphere)
+  return [
+    `${layer.name} · Nokta ${index + 1}`,
+    `Enlem / Boylam: ${point.lat.toFixed(7)}, ${point.lng.toFixed(7)}`,
+    `UTM: ${zone}${hemisphere} ${Math.round(utm.easting)} ${Math.round(utm.northing)}`,
+    `Haritada aç: https://www.google.com/maps?q=${point.lat.toFixed(7)},${point.lng.toFixed(7)}`,
+    'Evren Jeofizik GIS',
+  ].join('\n')
+}
+
+function polygonShareText(layer: PolygonLayer) {
+  const analysis = analyzePolygon(layer.points)
+  const coordinates = layer.points.map((point, index) => `${index + 1}. ${point.lat.toFixed(7)}, ${point.lng.toFixed(7)}`)
+  return [
+    layer.name,
+    `${layer.points.length} nokta`,
+    analysis.areaM2 > 0 ? `Alan: ${formatAreaShort(analysis.areaM2)}` : '',
+    '',
+    'Koordinatlar:',
+    ...coordinates,
+    '',
+    'Evren Jeofizik GIS',
+  ].filter((line, index) => line || index > 2).join('\n')
 }
 
 function desIcon() {
@@ -230,15 +299,18 @@ const PolygonLayerView = memo(function PolygonLayerView({
   isActive,
   performanceMode,
   onUpdatePoint,
+  onMessage,
 }: {
   layer: PolygonLayer
   isActive: boolean
   performanceMode: boolean
   onUpdatePoint: (pointId: string, point: Omit<GeoPoint, 'id'>) => void
+  onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
 }) {
   const strokeWidth = layer.strokeWidth ?? 3
   const strokeOpacity = layer.strokeOpacity ?? 1
   const fillOpacity = layer.fillOpacity ?? 0.14
+  const polygonAreaM2 = useMemo(() => layer.points.length >= 3 ? analyzePolygon(layer.points).areaM2 : 0, [layer.points])
   const markerIndexes = performanceMode ? (isActive ? sampledIndexes(layer.points.length, 180) : []) : sampledIndexes(layer.points.length, layer.points.length)
   const desIndexes = performanceMode ? sampledIndexes(layer.desPoints.length, 1200) : sampledIndexes(layer.desPoints.length, layer.desPoints.length)
 
@@ -247,6 +319,7 @@ const PolygonLayerView = memo(function PolygonLayerView({
       {layer.points.length >= 3 ? (
         <Polygon
           positions={layer.points.map((point) => [point.lat, point.lng])}
+          bubblingMouseEvents={false}
           pathOptions={{
             color: layer.color,
             fillColor: layer.color,
@@ -254,9 +327,27 @@ const PolygonLayerView = memo(function PolygonLayerView({
             weight: isActive ? strokeWidth : Math.max(1, strokeWidth - 1),
             opacity: isActive ? strokeOpacity : strokeOpacity * 0.55,
           }}
-        />
+        >
+          <Popup className="map-share-popup">
+            <div className="map-share-card">
+              <span className="map-share-kind">Poligon</span>
+              <strong>{layer.name}</strong>
+              <small>{layer.points.length} nokta · {formatAreaShort(polygonAreaM2)}</small>
+              <button type="button" onClick={() => void shareMapText(layer.name, polygonShareText(layer), onMessage)}><Share2 size={16} /> Poligonu Paylaş</button>
+            </div>
+          </Popup>
+        </Polygon>
       ) : layer.points.length >= 2 ? (
-        <Polyline positions={layer.points.map((point) => [point.lat, point.lng])} pathOptions={{ color: layer.color, weight: strokeWidth, opacity: strokeOpacity }} />
+        <Polyline positions={layer.points.map((point) => [point.lat, point.lng])} bubblingMouseEvents={false} pathOptions={{ color: layer.color, weight: strokeWidth, opacity: strokeOpacity }}>
+          <Popup className="map-share-popup">
+            <div className="map-share-card">
+              <span className="map-share-kind">Hat</span>
+              <strong>{layer.name}</strong>
+              <small>{layer.points.length} nokta</small>
+              <button type="button" onClick={() => void shareMapText(layer.name, polygonShareText(layer), onMessage)}><Share2 size={16} /> Hattı Paylaş</button>
+            </div>
+          </Popup>
+        </Polyline>
       ) : null}
 
       {markerIndexes.map((index) => {
@@ -266,6 +357,7 @@ const PolygonLayerView = memo(function PolygonLayerView({
             key={point.id}
             position={[point.lat, point.lng]}
             icon={numberIcon(index + 1, layer.color, isActive)}
+            title={`${layer.name} · Nokta ${index + 1}`}
             draggable={isActive && !performanceMode}
             eventHandlers={{
               dragend(event) {
@@ -274,7 +366,15 @@ const PolygonLayerView = memo(function PolygonLayerView({
               },
             }}
           >
-            <Tooltip direction="top" offset={[0, -14]}>{layer.name} · Nokta {index + 1}<br />{point.lat.toFixed(6)}, {point.lng.toFixed(6)}</Tooltip>
+            <Tooltip direction="top">{layer.name} · Nokta {index + 1}<br />{point.lat.toFixed(6)}, {point.lng.toFixed(6)}</Tooltip>
+            <Popup className="map-share-popup">
+              <div className="map-share-card">
+                <span className="map-share-kind">Koordinat noktası</span>
+                <strong>{layer.name} · Nokta {index + 1}</strong>
+                <small>{point.lat.toFixed(7)}, {point.lng.toFixed(7)}</small>
+                <button type="button" onClick={() => void shareMapText(`${layer.name} · Nokta ${index + 1}`, pointShareText(layer, point, index), onMessage)}><Share2 size={16} /> Noktayı Paylaş</button>
+              </div>
+            </Popup>
           </Marker>
         )
       })}
@@ -559,7 +659,7 @@ export default function MapWorkspace({
           />
         ) : null}
         <EventBridge addMode={addMode} measureMode={measureMode} onAddPoint={onAddPoint} onMeasurePoint={(point) => setMeasurePoints((current) => [...current, point])} positionListener={positionListener} />
-        {polygons.map((layer) => <PolygonLayerView key={layer.id} layer={layer} isActive={layer.id === activeId} performanceMode={performanceMode} onUpdatePoint={onUpdatePoint} />)}
+        {polygons.map((layer) => <PolygonLayerView key={layer.id} layer={layer} isActive={layer.id === activeId} performanceMode={performanceMode} onUpdatePoint={onUpdatePoint} onMessage={onMessage} />)}
 
         {measurePoints.length >= 2 && <Polyline positions={measurePoints.map((point) => [point.lat, point.lng])} pathOptions={{ color: '#ef4444', weight: 3, dashArray: '8 7' }} />}
         {measurePoints.length >= 3 && <Polygon positions={measurePoints.map((point) => [point.lat, point.lng])} pathOptions={{ color: '#ef4444', weight: 2, fillColor: '#ef4444', fillOpacity: 0.08, dashArray: '8 7' }} />}

@@ -187,7 +187,7 @@ export async function scanGeographicCoordinateImage(
 
   try {
     const common = {
-      tessedit_char_whitelist: `0123456789.,+-°º˚'\"′″NSEWnsew `,
+      tessedit_char_whitelist: `0123456789.,+-°º˚'"′″NSEWnsew `,
       preserve_interword_spaces: '1',
     }
 

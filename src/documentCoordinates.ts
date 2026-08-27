@@ -76,9 +76,9 @@ const MAX_OCR_PIXELS = 8_000_000
 const TURKEY_BOUNDS = { south: 34.5, north: 43.2, west: 24.5, east: 46.5 }
 const DECIMAL_TOKEN = /[-+]?\d{1,3}(?:[.,]\d{2,9})/g
 const METRIC_TOKEN = /[-+]?(?:\d{1,3}(?:[.\s]\d{3})+|\d{5,8})(?:[.,]\d+)?/g
-const DMS_PAIR = /(?:(\d{1,3})\s*[°º˚]\s*(\d{1,2})\s*['′’]\s*(\d{1,2}(?:[.,]\d+)?)\s*(?:["″“”])?\s*([NS])?)\s*[,;\/|\s]+(?:(\d{1,3})\s*[°º˚]\s*(\d{1,2})\s*['′’]\s*(\d{1,2}(?:[.,]\d+)?)\s*(?:["″“”])?\s*([EW])?)/gi
-const DDM_PAIR = /(?:(\d{1,3})\s*[°º˚]\s*(\d{1,2}(?:[.,]\d+)?)\s*['′’]?\s*([NS]))\s*[,;\/|\s]+(?:(\d{1,3})\s*[°º˚]\s*(\d{1,2}(?:[.,]\d+)?)\s*['′’]?\s*([EW]))/gi
-const DECIMAL_HEMISPHERE_PAIR = /([-+]?\d{1,3}(?:[.,]\d+)?)\s*[°º˚]?\s*([NS])\s*[,;\/|\s]+([-+]?\d{1,3}(?:[.,]\d+)?)\s*[°º˚]?\s*([EW])/gi
+const DMS_PAIR = /(?:(\d{1,3})\s*[°º˚]\s*(\d{1,2})\s*['′’]\s*(\d{1,2}(?:[.,]\d+)?)\s*(?:["″“”])?\s*([NS])?)\s*[,;/|\s]+(?:(\d{1,3})\s*[°º˚]\s*(\d{1,2})\s*['′’]\s*(\d{1,2}(?:[.,]\d+)?)\s*(?:["″“”])?\s*([EW])?)/gi
+const DDM_PAIR = /(?:(\d{1,3})\s*[°º˚]\s*(\d{1,2}(?:[.,]\d+)?)\s*['′’]?\s*([NS]))\s*[,;/|\s]+(?:(\d{1,3})\s*[°º˚]\s*(\d{1,2}(?:[.,]\d+)?)\s*['′’]?\s*([EW]))/gi
+const DECIMAL_HEMISPHERE_PAIR = /([-+]?\d{1,3}(?:[.,]\d+)?)\s*[°º˚]?\s*([NS])\s*[,;/|\s]+([-+]?\d{1,3}(?:[.,]\d+)?)\s*[°º˚]?\s*([EW])/gi
 
 function normalizeText(text: string) {
   return text
@@ -169,7 +169,7 @@ function detectContext(rawText: string, fallback: DocumentCoordinateOptions): Do
   let hemisphere: 'N' | 'S' | undefined
   let datum: string | undefined
 
-  const zoneMatch = text.match(/\b(?:UTM\s*)?(?:ZONE|ZON|D[İI]L[İI]M)\s*[:=\-]?\s*([1-5]?\d|60)\s*([C-HJ-NP-X]|[NS])?\b/i)
+  const zoneMatch = text.match(/\b(?:UTM\s*)?(?:ZONE|ZON|D[İI]L[İI]M)\s*[:=-]?\s*([1-5]?\d|60)\s*([C-HJ-NP-X]|[NS])?\b/i)
     || text.match(/\b(3[4-9])\s*([NS])\b/i)
   if (zoneMatch) {
     const value = Number(zoneMatch[1])
@@ -309,7 +309,7 @@ function extractStructuredLines(text: string, source: string, sourceKind: Docume
         const lng = lonFirst || Math.abs(first) > 90 ? first : second
         if (!isValidLatLng(lat, lng)) continue
         const name = inferPointName(line, decimalMatches[index].index ?? line.length)
-        let confidence = labelsLatLon ? 91 : tableMode === 'latlon' ? 86 : 62
+        const confidence = labelsLatLon ? 91 : tableMode === 'latlon' ? 86 : 62
         const reasons = [labelsLatLon ? 'Enlem/boylam başlığı bulundu' : tableMode === 'latlon' ? 'Enlem/boylam tablosu' : 'Yan yana ondalık koordinat']
         if (!isTurkeyPoint(lat, lng) && isTurkeyPoint(lng, lat) && Math.abs(lng) <= 90) {
           addCandidate(target, { lat: lng, lng: lat, format: 'Lat/Lon', raw: line, source: sourceLabel(source, lineIndex + 1), sourceKind, name, group, confidence: confidence + 3, reasons: [...reasons, 'Enlem/boylam sırası otomatik düzeltildi'], correctedOrder: true })
@@ -387,7 +387,11 @@ export function extractCoordinatesFromText(rawText: string, source: string, sour
 }
 
 function mergeAnalyses(analyses: TextAnalysis[], fallback: DocumentCoordinateOptions) {
-  const allCandidates = analyses.flatMap((analysis) => analysis.candidates.map(({ id: _id, confidenceLevel: _level, ...candidate }) => candidate))
+  const allCandidates = analyses.flatMap((analysis) => analysis.candidates.map(({ id, confidenceLevel, ...candidate }) => {
+    void id
+    void confidenceLevel
+    return candidate
+  }))
   const deduped = deduplicateCandidates(allCandidates)
   const evidence = Array.from(new Set(analyses.flatMap((analysis) => analysis.detection.evidence)))
   const detectedZone = analyses.find((analysis) => analysis.detection.evidence.some((item) => item.startsWith('Zone ')))?.detection.zone

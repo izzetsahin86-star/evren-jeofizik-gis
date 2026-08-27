@@ -47,7 +47,7 @@ function axisOf(line: string): Axis | null {
 
 function detectContext(text: string, options: DocumentCoordinateOptions) {
   const folded = fold(text)
-  const zoneMatch = text.match(/\b(?:UTM\s*)?(?:ZONE|ZON|D[İI]L[İI]M)\s*[:=\-]?\s*([1-5]?\d|60)\s*([NS])?\b/i)
+  const zoneMatch = text.match(/\b(?:UTM\s*)?(?:ZONE|ZON|D[İI]L[İI]M)\s*[:=-]?\s*([1-5]?\d|60)\s*([NS])?\b/i)
   const explicitZone = zoneMatch ? Number(zoneMatch[1]) : undefined
   const province = /\bDENIZLI\b/.test(folded) || /\bBULDAN\b/.test(folded) ? 'DENIZLI' : undefined
   const zone = explicitZone ?? (province ? 35 : options.zone)
@@ -165,7 +165,10 @@ function merge(generic: DocumentCoordinateCandidate[], table: TableCandidate[]) 
   const map = new Map<string, DocumentCoordinateCandidate & { order?: number }>()
   filtered.forEach((candidate) => map.set(`${candidate.lat.toFixed(7)}:${candidate.lng.toFixed(7)}`, candidate))
   table.forEach(({ order, ...candidate }) => map.set(`${candidate.lat.toFixed(7)}:${candidate.lng.toFixed(7)}`, { ...candidate, order }))
-  return Array.from(map.values()).sort((a, b) => (a.order ?? 99999) - (b.order ?? 99999)).map(({ order: _order, ...candidate }, index) => ({ ...candidate, id: `doc-v4-${index}-${candidate.lat.toFixed(6)}-${candidate.lng.toFixed(6)}` }))
+  return Array.from(map.values()).sort((a, b) => (a.order ?? 99999) - (b.order ?? 99999)).map(({ order, ...candidate }, index) => {
+    void order
+    return { ...candidate, id: `doc-v4-${index}-${candidate.lat.toFixed(6)}-${candidate.lng.toFixed(6)}` }
+  })
 }
 
 async function preprocess(file: File) {

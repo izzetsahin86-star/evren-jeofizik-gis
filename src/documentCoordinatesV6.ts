@@ -203,7 +203,7 @@ function findTablePairs(rows: NumericRow[]) {
 
 function detectContext(text: string, options: DocumentCoordinateOptions) {
   const folded = fold(text)
-  const zoneMatch = folded.match(/\b(?:UTM\s*)?(?:ZONE|ZON|DILIM)\s*[:=\-]?\s*([1-5]?\d|60)\s*([NS])?\b/)
+  const zoneMatch = folded.match(/\b(?:UTM\s*)?(?:ZONE|ZON|DILIM)\s*[:=-]?\s*([1-5]?\d|60)\s*([NS])?\b/)
   let zone = zoneMatch ? Number(zoneMatch[1]) : options.zone
   let hemisphere: 'N' | 'S' = zoneMatch?.[2] === 'S' ? 'S' : 'N'
   const evidence: string[] = []

@@ -27,7 +27,8 @@ import {
   X,
 } from 'lucide-react'
 import { splitBulkCoordinateEntries } from '../coordinateInput'
-import { scanCoordinateDocument, type DocumentScanProgress, type DocumentScanResult } from '../documentCoordinates'
+import type { DocumentScanProgress, DocumentScanResult } from '../documentCoordinates'
+import { validateCoordinates } from '../coordinateValidation'
 import {
   analyzePolygon,
   deltaEastNorth,
@@ -47,7 +48,6 @@ import {
   readSpatialFile,
   toUtm,
 } from '../geo'
-import { exportProjectPdf } from '../report'
 import type { BaseLayerId, CoordinateFormat, DisplaySettings, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer } from '../types'
 import { DEFAULT_EXPORT_POLYGON_STYLE } from '../exportStyle'
 import ExportPolygonStyleControls from './ExportPolygonStyleControls'
@@ -133,6 +133,7 @@ interface BottomPanelProps {
   onDeletePolygon: (id: string) => void
   onDuplicatePolygon: (id: string) => void
   onAddPoints: (points: Array<Omit<GeoPoint, 'id'>>) => void
+  onUpdatePoint: (pointId: string, point: Omit<GeoPoint, 'id'>) => void
   onDeletePoint: (pointId: string) => void
   onClearPoints: () => void
   onSetDesPoints: (polygonId: string, points: GeoPoint[]) => void
@@ -273,6 +274,7 @@ function CoordinatePanel(props: BottomPanelProps) {
     setDocumentProgress({ percent: 1, label: 'Belge hazırlanıyor…' })
     props.onMessage('Belgedeki koordinatlar aranıyor. Taranmış sayfalarda OCR otomatik çalışır.', 'info')
     try {
+      const { scanCoordinateDocument } = await import('../documentCoordinates')
       const result = await scanCoordinateDocument(file, { zone, hemisphere, datum }, setDocumentProgress)
       setDocumentScan(result)
       setSelectedDocumentIds(new Set(result.candidates.map((candidate) => candidate.id)))
@@ -321,6 +323,15 @@ function CoordinatePanel(props: BottomPanelProps) {
     setDocumentScan(null)
     setSelectedDocumentIds(new Set())
     setDocumentProgress({ percent: 0, label: '' })
+  }
+
+  const coordinateIssues = useMemo(() => validateCoordinates(active.points, zone), [active.points, zone])
+
+  const fixSwappedPoint = (pointId: string) => {
+    const point = active.points.find((candidate) => candidate.id === pointId)
+    if (!point) return
+    props.onUpdatePoint(pointId, { lat: point.lng, lng: point.lat })
+    props.onMessage('Enlem ve boylam yer değiştirilerek düzeltildi.', 'success')
   }
 
   return (
@@ -416,6 +427,31 @@ function CoordinatePanel(props: BottomPanelProps) {
         </Field>
         <p className="form-note">Koordinatları alt alta veya yan yana yazın. Yan yana noktaları ; ile ayırın. # ile başlayan açıklamalar atlanır.</p>
         <button type="button" className="primary-button purple" onClick={addBulk}><Plus size={18} /> Koordinatları Ekle</button>
+      </Card>
+
+      <Card
+        title="Koordinat Hata Kontrolü"
+        subtitle={active.points.length ? (coordinateIssues.length ? `${coordinateIssues.length} olası sorun bulundu` : 'Tüm kontroller temiz') : 'Nokta eklendiğinde otomatik kontrol edilir'}
+        icon={coordinateIssues.length ? <AlertTriangle size={19} /> : <CheckCircle2 size={19} />}
+        tone={coordinateIssues.length ? 'amber' : 'green'}
+      >
+        {coordinateIssues.length ? (
+          <div className="coordinate-validation-list" role="list">
+            {coordinateIssues.map((issue) => (
+              <article key={issue.id} className={`coordinate-validation-item issue-${issue.type}`} role="listitem">
+                <span className="coordinate-validation-icon"><AlertTriangle size={16} /></span>
+                <span className="coordinate-validation-copy"><strong>{issue.title}</strong><small>{issue.description}</small></span>
+                <span className="coordinate-validation-actions">
+                  <button type="button" onClick={() => props.onFlyTo({ ...issue.target, zoom: 17 })}><Eye size={15} /> Göster</button>
+                  {issue.canDelete && issue.pointId && <button type="button" className="is-danger" onClick={() => props.onDeletePoint(issue.pointId!)}><Trash2 size={15} /> Sil</button>}
+                  {issue.canSwap && issue.pointId && <button type="button" className="is-fix" onClick={() => fixSwappedPoint(issue.pointId!)}><Copy size={15} /> Düzelt</button>}
+                </span>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="coordinate-validation-clean"><CheckCircle2 size={22} /><span><strong>{active.points.length ? 'Belirgin koordinat hatası bulunmadı' : 'Kontrol için koordinat ekleyin'}</strong><small>Tekrar, UTM zonu, ters giriş, sıra dışı mesafe ve kenar kesişimi denetlenir.</small></span></div>
+        )}
       </Card>
 
       <Card title="Koordinatlar" subtitle={`${active.points.length} nokta`} icon={<CircleDot size={19} />}>
@@ -639,6 +675,7 @@ function ExportPanel(props: BottomPanelProps) {
   const exportPdf = async () => {
     setReportBusy(true)
     try {
+      const { exportProjectPdf } = await import('../report')
       await exportProjectPdf({ polygons: props.polygons, filename: safeName, metadata: { projectName: reportProject, client: reportClient, location: reportLocation, notes: reportNotes }, includeMap })
       props.onMessage('Gelişmiş PDF raporu hazırlandı.', 'success')
     } catch {

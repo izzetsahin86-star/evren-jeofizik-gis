@@ -72,6 +72,8 @@ function installMapCaptureHook() {
   if (mapHookInstalled) return
   mapHookInstalled = true
   L.Map.addInitHook(function captureEvrenMap(this: LeafletMap) {
+    // Leaflet init hooks intentionally expose the map instance through `this`.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     capturedMap = this
     window.dispatchEvent(new CustomEvent(MAP_READY_EVENT))
     this.once('unload', () => {
@@ -307,6 +309,7 @@ export default function FieldPointsFeature() {
   useEffect(() => {
     const layer = layerRef.current
     if (!layer) return
+    const popupUrls = popupUrlsRef.current
     layer.clearLayers()
 
     points.forEach((point) => {
@@ -319,17 +322,17 @@ export default function FieldPointsFeature() {
       marker.bindTooltip(point.name, { direction: 'top', offset: [0, -28] })
       marker.bindPopup(popupHtml(point), { maxWidth: 310 })
       marker.on('click', async () => {
-        const oldUrl = popupUrlsRef.current.get(point.id)
+        const oldUrl = popupUrls.get(point.id)
         if (oldUrl) {
           URL.revokeObjectURL(oldUrl)
-          popupUrlsRef.current.delete(point.id)
+          popupUrls.delete(point.id)
         }
         if (!point.photoId) return
         try {
           const blob = await getPhoto(point.photoId)
           if (!blob) return
           const url = URL.createObjectURL(blob)
-          popupUrlsRef.current.set(point.id, url)
+          popupUrls.set(point.id, url)
           marker.setPopupContent(popupHtml(point, url))
         } catch {
           // Fotoğraf okunamazsa metin bilgileri gösterilmeye devam eder.
@@ -348,8 +351,8 @@ export default function FieldPointsFeature() {
     })
 
     return () => {
-      popupUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
-      popupUrlsRef.current.clear()
+      popupUrls.forEach((url) => URL.revokeObjectURL(url))
+      popupUrls.clear()
     }
   }, [points, map])
 

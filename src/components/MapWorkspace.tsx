@@ -284,7 +284,7 @@ const PolygonLayerView = memo(function PolygonLayerView({
         return performanceMode ? (
           <CircleMarker key={point.id} center={[point.lat, point.lng]} radius={3} pathOptions={{ color: '#ffffff', weight: 1, fillColor: '#10b981', fillOpacity: 1 }} />
         ) : (
-          <Marker key={point.id} position={[point.lat, point.lng]} icon={desIcon()}>
+          <Marker key={point.id} position={[point.lat, point.lng]} icon={desIcon()} interactive={false} keyboard={false}>
             <Tooltip direction="top" offset={[0, -8]}>{point.name}</Tooltip>
           </Marker>
         )

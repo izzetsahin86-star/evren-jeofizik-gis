@@ -84,7 +84,7 @@ function parseMetricTokens(line: string) {
 }
 
 function explicitZone(text: string) {
-  const match = text.match(/\b(?:UTM\s*)?(?:ZONE|ZON|D[İI]L[İI]M)\s*[:=\-]?\s*([1-5]?\d|60)\s*([NS])?\b/i)
+  const match = text.match(/\b(?:UTM\s*)?(?:ZONE|ZON|D[İI]L[İI]M)\s*[:=-]?\s*([1-5]?\d|60)\s*([NS])?\b/i)
   if (!match) return null
   const zone = Number(match[1])
   if (zone < 1 || zone > 60) return null
@@ -99,7 +99,7 @@ function explicitDatum(text: string) {
 
 function provinceFromDocument(text: string) {
   const normalized = fold(text)
-  const fieldMatch = normalized.match(/(?:^|\n)\s*(?:ILI|IL)\s*[:.\-]?\s*([A-Z]{3,20})/m)
+  const fieldMatch = normalized.match(/(?:^|\n)\s*(?:ILI|IL)\s*[:.-]?\s*([A-Z]{3,20})/m)
   if (fieldMatch && PROVINCE_ZONE[fieldMatch[1]]) return fieldMatch[1]
 
   const licensePart = normalized.split(/RUHSAT\s+SAHIBININ\s+ADRESI|RUHSAT\s+SAHIBI\s+ADRESI/)[0]
@@ -290,7 +290,10 @@ function mergeCandidates(generic: DocumentCoordinateCandidate[], table: TableCan
   }
   return Array.from(map.values())
     .sort((a, b) => (a.order ?? 99999) - (b.order ?? 99999))
-    .map(({ order: _order, ...candidate }, index) => ({ ...candidate, id: `doc-v3-${index}-${candidate.lat.toFixed(6)}-${candidate.lng.toFixed(6)}` }))
+    .map(({ order, ...candidate }, index) => {
+      void order
+      return { ...candidate, id: `doc-v3-${index}-${candidate.lat.toFixed(6)}-${candidate.lng.toFixed(6)}` }
+    })
 }
 
 function buildResult(fileName: string, pageCount: number, usedOcr: boolean, generic: DocumentCoordinateCandidate[], table: TableAnalysis, fallbackDetection?: DocumentDetectionSummary, fallbackWarning?: string): DocumentScanResult {

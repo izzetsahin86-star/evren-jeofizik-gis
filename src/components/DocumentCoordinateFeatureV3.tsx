@@ -15,6 +15,8 @@ function installMapHook() {
   if (hookInstalled) return
   hookInstalled = true
   L.Map.addInitHook(function captureDocumentMap(this: LeafletMap) {
+    // Leaflet init hooks intentionally expose the map instance through `this`.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     capturedMap = this
     window.dispatchEvent(new CustomEvent(MAP_READY_EVENT))
     this.once('unload', () => {

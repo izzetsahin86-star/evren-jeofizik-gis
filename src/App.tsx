@@ -337,6 +337,7 @@ export default function App() {
           onDeletePolygon={deletePolygon}
           onDuplicatePolygon={duplicatePolygon}
           onAddPoints={addPoints}
+          onUpdatePoint={updatePoint}
           onDeletePoint={(pointId) => mutateActive((layer) => ({ ...layer, points: layer.points.filter((point) => point.id !== pointId) }))}
           onClearPoints={() => mutateActive((layer) => ({ ...layer, points: [], desPoints: [] }))}
           onSetDesPoints={(polygonId, points) => updatePolygons((current) => current.map((layer) => layer.id === polygonId ? { ...layer, desPoints: points } : layer))}

@@ -247,6 +247,21 @@ button { color: inherit; -webkit-tap-highlight-color: transparent; touch-action:
 .coordinate-list li { min-width: 0; display: grid; grid-template-columns: 28px minmax(0,1fr) 30px; align-items: center; gap: 8px; padding: 7px; border: 1px solid #edf0f3; border-radius: 10px; background: #fafcfd; content-visibility: auto; contain-intrinsic-size: 40px; }
 .coordinate-list code { overflow: hidden; color: #475569; font: 10px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; }
 .coordinate-list li button { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 8px; color: #e87078; background: #fff; cursor: pointer; }
+.coordinate-validation-list { display: grid; gap: 8px; }
+.coordinate-validation-item { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 8px 10px; align-items: start; padding: 10px; border: 1px solid #fed7aa; border-radius: 13px; background: linear-gradient(145deg,#fffaf5,#fff7ed); }
+.coordinate-validation-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; color: #c2410c; background: #ffedd5; }
+.coordinate-validation-copy { display: grid; gap: 3px; min-width: 0; }
+.coordinate-validation-copy strong { font-size: 10px; line-height: 1.35; color: #7c2d12; }
+.coordinate-validation-copy small { font-size: 8px; line-height: 1.45; color: #78716c; }
+.coordinate-validation-actions { grid-column: 1/-1; display: flex; flex-wrap: wrap; gap: 6px; padding-left: 38px; }
+.coordinate-validation-actions button { min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 6px 9px; border: 1px solid #dbe4ee; border-radius: 9px; color: #475569; background: #fff; font-size: 8px; font-weight: 800; }
+.coordinate-validation-actions button:active { transform: scale(.96); }
+.coordinate-validation-actions .is-danger { color: #b91c1c; border-color: #fecaca; background: #fff7f7; }
+.coordinate-validation-actions .is-fix { color: #047857; border-color: #a7f3d0; background: #f0fdf4; }
+.coordinate-validation-clean { display: flex; align-items: center; gap: 10px; padding: 11px; border: 1px solid #bbf7d0; border-radius: 13px; color: #15803d; background: #f0fdf4; }
+.coordinate-validation-clean span { display: grid; gap: 3px; }
+.coordinate-validation-clean strong { font-size: 10px; }
+.coordinate-validation-clean small { font-size: 8px; line-height: 1.45; color: #4b7660; }
 .point-number { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; color: white; font-size: 10px; font-weight: 800; }
 .dropzone { position: relative; min-height: 108px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 15px; color: #7c889a; border: 1.5px dashed #d9e0e7; border-radius: 13px; background: #fcfdfe; cursor: pointer; text-align: center; }
 .dropzone.tall { min-height: 135px; }
@@ -445,6 +460,8 @@ button { color: inherit; -webkit-tap-highlight-color: transparent; touch-action:
   .form-field input, .form-field select, .inline-form input, .search-field input { height: 48px; border-radius: 13px; }
   .segmented button { min-height: 42px; }
   .form-grid.three { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .coordinate-validation-actions { padding-left: 0; }
+  .coordinate-validation-actions button { flex: 1; min-height: 38px; }
 }
 
 @media (max-width: 390px) {

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
-import JSZip from 'jszip'
 import { CheckCircle2, FileDown, Upload, X } from 'lucide-react'
 import { DEFAULT_EXPORT_POLYGON_STYLE } from '../exportStyle'
 import { formatPoint, polygonsToGeoJson, polygonsToKml, readSpatialFile } from '../geo'
@@ -309,6 +308,7 @@ async function readFieldPoints(file: File) {
   const extension = file.name.toLowerCase().split('.').pop() || ''
   if (extension === 'csv') return []
   if (extension === 'kmz') {
+    const { default: JSZip } = await import('jszip')
     const zip = await JSZip.loadAsync(await file.arrayBuffer())
     const entry = Object.values(zip.files).find((item) => !item.dir && item.name.toLowerCase().endsWith('.kml'))
     if (!entry) throw new Error('KMZ içinde KML bulunamadı.')
@@ -363,10 +363,11 @@ export default function FieldPointsTransferInlineFeature() {
 
   useEffect(() => {
     const discover = () => {
-      const active = document.querySelector<HTMLButtonElement>('.smart-dock button.is-active[data-panel-id], .smart-dock-menu button.is-active[data-panel-id]')
-      const id = active?.dataset.panelId
-      const next = id === 'import' || id === 'export' ? id : null
-      const nextHost = next ? document.querySelector<HTMLElement>('.smart-sheet-body .panel-stack > .panel-card:first-child .panel-card-body') : null
+      const sheet = document.querySelector<HTMLElement>('.smart-sheet')
+      const next = sheet?.classList.contains('smart-sheet-import')
+        ? 'import'
+        : sheet?.classList.contains('smart-sheet-export') ? 'export' : null
+      const nextHost = next ? sheet?.querySelector<HTMLElement>('.smart-sheet-body .panel-stack > .panel-card:first-child .panel-card-body') ?? null : null
       setPanel(next)
       setHost(nextHost)
     }
@@ -498,6 +499,7 @@ export default function FieldPointsTransferInlineFeature() {
     const name = safeName(filename)
     if (format === 'kml') downloadBlob(combinedKml(polygons, points, exportStyle), `${name}.kml`, 'application/vnd.google-earth.kml+xml;charset=utf-8')
     if (format === 'kmz') {
+      const { default: JSZip } = await import('jszip')
       const zip = new JSZip()
       zip.file('doc.kml', combinedKml(polygons, points, exportStyle))
       downloadBlob(await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } }), `${name}.kmz`, 'application/vnd.google-earth.kmz')

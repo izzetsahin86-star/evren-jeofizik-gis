@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import L, { type Map as LeafletMap, type Marker as LeafletMarker } from 'leaflet'
 import { MapPin, Search, X } from 'lucide-react'
@@ -45,6 +45,8 @@ function installMapHook() {
   if (hookInstalled) return
   hookInstalled = true
   L.Map.addInitHook(function captureMap(this: LeafletMap) {
+    // Leaflet init hooks intentionally expose the map instance through `this`.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     capturedMap = this
     window.dispatchEvent(new CustomEvent(MAP_READY_EVENT))
     this.once('unload', () => {
@@ -218,7 +220,7 @@ export default function MapAddressSearchFeatureV2() {
     setMessage('')
   }
 
-  const fetchSuggestions = async (value: string, immediate = false) => {
+  const fetchSuggestions = useCallback(async (value: string, immediate = false) => {
     if (!map || value.trim().length < 3) return
     const center = map.getCenter()
     const key = `${value.trim().toLocaleLowerCase('tr-TR')}|${center.lat.toFixed(2)},${center.lng.toFixed(2)}|${Math.round(map.getZoom())}`
@@ -279,7 +281,7 @@ export default function MapAddressSearchFeatureV2() {
     }
 
     if (immediate) inputRef.current?.focus()
-  }
+  }, [map])
 
   useEffect(() => {
     if (!open || !map) return
@@ -301,7 +303,7 @@ export default function MapAddressSearchFeatureV2() {
 
     const timer = window.setTimeout(() => void fetchSuggestions(value), AUTOCOMPLETE_DELAY)
     return () => window.clearTimeout(timer)
-  }, [query, open, map])
+  }, [query, open, map, fetchSuggestions])
 
   const runSearch = async () => {
     if (!map) return

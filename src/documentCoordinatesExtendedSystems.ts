@@ -45,7 +45,7 @@ function datumFromText(value: string) {
 }
 
 function epsgHint(value: string): SystemHint | null {
-  const codes = Array.from(value.matchAll(/\bEPSG\s*[:=\-]?\s*(\d{4,5})\b/g), (match) => Number(match[1]))
+  const codes = Array.from(value.matchAll(/\bEPSG\s*[:=-]?\s*(\d{4,5})\b/g), (match) => Number(match[1]))
   for (const code of codes) {
     if (code >= 5253 && code <= 5259) {
       const centralMeridian = 27 + (code - 5253) * 3
@@ -77,8 +77,8 @@ function detectSystemHint(text: string, base: DocumentScanResult): SystemHint | 
 
   const evidence: string[] = [`${datum} belge üzerinde açıkça algılandı`]
   const tmMatch = value.match(/\bTM\s*[- ]?\s*(27|30|33|36|39|42|45)\b/)
-  const gkMatch = value.match(/(?:GAUSS\s*[- ]?\s*KRUGER|GAUSSKRUGER).{0,50}?(?:ZONE|ZON|DILIM)?\s*[:=\-]?\s*(9|10|11|12|13|14|15)\b/)
-  const meridianMatch = value.match(/(?:DILIM\s+ORTA\s+MERIDYENI|ORTA\s+MERIDYEN|MERKEZI\s+MERIDYEN|CENTRAL\s+MERIDIAN)\s*[:=\-]?\s*(27|30|33|36|39|42|45)\b/)
+  const gkMatch = value.match(/(?:GAUSS\s*[- ]?\s*KRUGER|GAUSSKRUGER).{0,50}?(?:ZONE|ZON|DILIM)?\s*[:=-]?\s*(9|10|11|12|13|14|15)\b/)
+  const meridianMatch = value.match(/(?:DILIM\s+ORTA\s+MERIDYENI|ORTA\s+MERIDYEN|MERKEZI\s+MERIDYEN|CENTRAL\s+MERIDIAN)\s*[:=-]?\s*(27|30|33|36|39|42|45)\b/)
   const threeDegree = /\b3\s*(?:°|DERECE|DEGREE)\b|3\s*[- ]?DEGREE|3\s*DERECELIK/.test(value)
   const mentionsGk = /GAUSS\s*[- ]?\s*KRUGER|GAUSSKRUGER/.test(value)
   const mentionsUtm = /\bUTM\b/.test(value)
@@ -101,7 +101,7 @@ function detectSystemHint(text: string, base: DocumentScanResult): SystemHint | 
     return { datum, projection: mentionsGk ? 'GK3' : 'TM3', centralMeridian, gkZone: mentionsGk ? centralMeridian / 3 : undefined, evidence }
   }
 
-  const utmZoneMatch = value.match(/\bUTM\b.{0,28}?(?:ZONE|ZON|DILIM)?\s*[:=\-]?\s*(3[5-8])\s*([NS])?\b/)
+  const utmZoneMatch = value.match(/\bUTM\b.{0,28}?(?:ZONE|ZON|DILIM)?\s*[:=-]?\s*(3[5-8])\s*([NS])?\b/)
   const utmZone = utmZoneMatch ? Number(utmZoneMatch[1]) : base.detection.zone
   evidence.push(`${datum} datumlu UTM olarak değerlendirildi`)
   return { datum, projection: 'UTM', utmZone, evidence }

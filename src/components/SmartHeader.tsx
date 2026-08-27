@@ -59,10 +59,10 @@ export default function SmartHeader({
         </div>
 
         <div className="smart-header-actions">
-          <button type="button" onClick={onUndo} disabled={!canUndo} aria-label="Geri al"><Undo2 size={19} /></button>
-          <button type="button" onClick={onRedo} disabled={!canRedo} aria-label="Yinele"><Redo2 size={19} /></button>
+          <button type="button" className="smart-header-action tone-cyan" onClick={onUndo} disabled={!canUndo} aria-label="Geri al"><Undo2 size={19} /></button>
+          <button type="button" className="smart-header-action tone-violet" onClick={onRedo} disabled={!canRedo} aria-label="Yinele"><Redo2 size={19} /></button>
           <div className="smart-header-menu-wrap" ref={menuRef}>
-            <button type="button" className={menuOpen ? 'is-active' : ''} onClick={() => setMenuOpen((value) => !value)} aria-label="Çalışma seçenekleri" aria-expanded={menuOpen}>{menuOpen ? <X size={19} /> : <EllipsisVertical size={20} />}</button>
+            <button type="button" className={`smart-header-action tone-amber${menuOpen ? ' is-active' : ''}`} onClick={() => setMenuOpen((value) => !value)} aria-label="Çalışma seçenekleri" aria-expanded={menuOpen}>{menuOpen ? <X size={19} /> : <EllipsisVertical size={20} />}</button>
             {menuOpen ? (
               <div className="smart-header-menu">
                 <button type="button" onClick={() => { onFit(); setMenuOpen(false) }}><Expand size={18} /><span><strong>Poligona Yaklaş</strong><small>Aktif alanı ekrana sığdır</small></span></button>

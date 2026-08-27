@@ -557,9 +557,9 @@ export default function MapWorkspace({
 
       {displaySettings.mapActions && (
         <div className="smart-map-tools">
-          <button type="button" className={addMode ? 'is-active' : ''} onClick={() => { if (measureMode) setMeasureMode(false); onToggleAddMode() }} aria-label={addMode ? 'Haritaya nokta ekleme açık' : 'Haritaya tıklayarak nokta ekle'} title={addMode ? 'Haritaya Tıklayın' : 'Tıkla ve Ekle'}><MousePointer2 size={19} /><span>{addMode ? 'Ekleme Açık' : 'Tıkla & Ekle'}</span></button>
-          <button type="button" onClick={addTargetPoint} aria-label="Hedef merkezinden nokta ekle" title="Hedeften Ekle"><Crosshair size={19} /><span>Hedeften Ekle</span></button>
-          <button type="button" className={measureMode ? 'is-measuring' : ''} onClick={toggleMeasurement} aria-label={measureMode ? 'Serbest ölçüm açık' : 'Serbest ölçümü başlat'} title={measureMode ? 'Ölçüm Açık' : 'Serbest Ölç'}><Ruler size={19} /><span>{measureMode ? 'Ölçüm Açık' : 'Serbest Ölç'}</span></button>
+          <button type="button" className={`smart-map-action tone-cyan${addMode ? ' is-active' : ''}`} onClick={() => { if (measureMode) setMeasureMode(false); onToggleAddMode() }} aria-label={addMode ? 'Haritaya nokta ekleme açık' : 'Haritaya tıklayarak nokta ekle'} aria-pressed={addMode} title={addMode ? 'Haritaya Tıklayın' : 'Tıkla ve Ekle'}><span className="smart-map-action-icon"><MousePointer2 size={20} /></span><span className="smart-map-action-label">{addMode ? 'Ekleme Açık' : 'Tıkla & Ekle'}</span></button>
+          <button type="button" className="smart-map-action tone-violet" onClick={addTargetPoint} aria-label="Hedef merkezinden nokta ekle" title="Hedeften Ekle"><span className="smart-map-action-icon"><Crosshair size={20} /></span><span className="smart-map-action-label">Hedeften Ekle</span></button>
+          <button type="button" className={`smart-map-action tone-rose${measureMode ? ' is-measuring' : ''}`} onClick={toggleMeasurement} aria-label={measureMode ? 'Serbest ölçüm açık' : 'Serbest ölçümü başlat'} aria-pressed={measureMode} title={measureMode ? 'Ölçüm Açık' : 'Serbest Ölç'}><span className="smart-map-action-icon"><Ruler size={20} /></span><span className="smart-map-action-label">{measureMode ? 'Ölçüm Açık' : 'Serbest Ölç'}</span></button>
         </div>
       )}
 
@@ -573,10 +573,10 @@ export default function MapWorkspace({
 
       {displaySettings.locationCard && (
         <div className="smart-location-controls">
-          <button type="button" className={`locate-button${gpsPosition ? ' has-fix' : ''}`} onClick={locate} aria-label="Mevcut konumum" title="Mevcut konumu bir kez bul"><LocateFixed size={22} /></button>
-          <button type="button" className={`locate-button${tracking ? ' has-fix' : ''}`} onClick={() => tracking ? stopTracking() : startTracking()} aria-label={tracking ? 'Canlı konum takibini durdur' : 'Canlı konum takibini başlat'} title={tracking ? 'Canlı takibi durdur' : 'Canlı takibi başlat'}>{tracking ? <Square size={18} fill="currentColor" /> : <Navigation size={21} />}</button>
+          <button type="button" className={`locate-button tone-cyan${gpsPosition ? ' has-fix' : ''}`} onClick={locate} aria-label="Mevcut konumum" title="Mevcut konumu bir kez bul"><LocateFixed size={22} /></button>
+          <button type="button" className={`locate-button tone-green${tracking ? ' is-tracking' : ''}`} onClick={() => tracking ? stopTracking() : startTracking()} aria-label={tracking ? 'Canlı konum takibini durdur' : 'Canlı konum takibini başlat'} aria-pressed={tracking} title={tracking ? 'Canlı takibi durdur' : 'Canlı takibi başlat'}>{tracking ? <Square size={18} fill="currentColor" /> : <Navigation size={21} />}</button>
           {gpsPosition && <span className="gps-accuracy">±{formatNumber(gpsPosition.accuracy, 0)} m{tracking || trackPoints.length ? ` · ${tracking ? 'CANLI · ' : ''}${trackPoints.length} pkt · ${formatTrackDistance(trackDistanceM)}` : ''}</span>}
-          {trackPoints.length > 0 && !tracking && <button type="button" className="locate-button" onClick={clearTrack} aria-label="Canlı takip izini temizle" title="Takip izini temizle"><Trash2 size={18} /></button>}
+          {trackPoints.length > 0 && !tracking && <button type="button" className="locate-button tone-rose" onClick={clearTrack} aria-label="Canlı takip izini temizle" title="Takip izini temizle"><Trash2 size={18} /></button>}
         </div>
       )}
       <div className="map-crosshair" aria-hidden="true"><Crosshair size={24} strokeWidth={1.4} /></div>

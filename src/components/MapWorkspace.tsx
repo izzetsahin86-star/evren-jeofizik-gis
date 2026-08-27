@@ -480,6 +480,17 @@ export default function MapWorkspace({
   }
 
   const locate = () => {
+    if (gpsPosition && !tracking) {
+      setGpsPosition(null)
+      onMessage('Konum göstergesi kapatıldı.', 'info')
+      return
+    }
+    if (tracking && gpsPosition) {
+      const map = mapRef.current
+      if (map) map.flyTo([gpsPosition.lat, gpsPosition.lng], Math.max(17, map.getZoom()), { duration: 0.8 })
+      onMessage('Canlı konum takibi açık. Takibi Canlı panelinden durdurabilirsiniz.', 'info')
+      return
+    }
     if (!navigator.geolocation) {
       onMessage('Bu cihaz konum hizmetini desteklemiyor.', 'error')
       return
@@ -573,7 +584,7 @@ export default function MapWorkspace({
 
       {displaySettings.locationCard && (
         <div className="smart-location-controls">
-          <button type="button" className={`locate-button tone-cyan${gpsPosition ? ' has-fix' : ''}`} onClick={locate} aria-label="Mevcut konumum" title="Mevcut konumu bir kez bul"><LocateFixed size={22} /></button>
+          <button type="button" className={`locate-button tone-cyan${gpsPosition ? ' has-fix' : ''}`} onClick={locate} aria-label={gpsPosition && !tracking ? 'Konum göstergesini kapat' : 'Mevcut konumum'} aria-pressed={Boolean(gpsPosition)} title={gpsPosition && !tracking ? 'Konumu kapat' : tracking ? 'Canlı konuma dön' : 'Mevcut konumu bul'}><LocateFixed size={22} /></button>
           <button type="button" className={`locate-button tone-green${tracking ? ' is-tracking' : ''}`} onClick={() => tracking ? stopTracking() : startTracking()} aria-label={tracking ? 'Canlı konum takibini durdur' : 'Canlı konum takibini başlat'} aria-pressed={tracking} title={tracking ? 'Canlı takibi durdur' : 'Canlı takibi başlat'}>{tracking ? <Square size={18} fill="currentColor" /> : <Navigation size={21} />}</button>
           {gpsPosition && <span className="gps-accuracy">±{formatNumber(gpsPosition.accuracy, 0)} m{tracking || trackPoints.length ? ` · ${tracking ? 'CANLI · ' : ''}${trackPoints.length} pkt · ${formatTrackDistance(trackDistanceM)}` : ''}</span>}
           {trackPoints.length > 0 && !tracking && <button type="button" className="locate-button tone-rose" onClick={clearTrack} aria-label="Canlı takip izini temizle" title="Takip izini temizle"><Trash2 size={18} /></button>}

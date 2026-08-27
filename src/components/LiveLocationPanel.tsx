@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
@@ -20,6 +20,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { PolygonLayer } from '../types'
+import { LIVE_TRACK_STATUS_EVENT, sendLiveTrackCommand, type LiveTrackStatus } from '../liveTrackingBridge'
 import { Card, Field, SheetHeader } from './PanelUi'
 
 const TRACK_STORAGE_KEY = 'evren-jeofizik-gis-live-track-v1'
@@ -203,16 +204,6 @@ function trackDistance(points: TrackPoint[]) {
   return points.slice(1).reduce((sum, point, index) => sum + distanceMeters(points[index], point), 0)
 }
 
-function liveButton(kind: 'start' | 'stop' | 'clear') {
-  const labels = kind === 'start'
-    ? ['Canlı konum takibini başlat', 'Canlı takibi başlat']
-    : kind === 'stop'
-      ? ['Canlı konum takibini durdur', 'Canlı takibi durdur']
-      : ['Canlı takip izini temizle', 'Takip izini temizle']
-  return Array.from(document.querySelectorAll<HTMLButtonElement>('.smart-location-controls button'))
-    .find((button) => labels.includes(button.getAttribute('aria-label') || '') || labels.includes(button.getAttribute('title') || '')) ?? null
-}
-
 function numberBadge(value: number) {
   return <span className="live-feature-number">{value}</span>
 }
@@ -265,17 +256,21 @@ export default function LiveLocationPanel({
   }, [])
 
   useEffect(() => {
-    const sync = () => {
-      const points = readTrack()
-      setRawTrack(points)
-      setTracking(Boolean(liveButton('stop')))
-      setNow(Date.now())
-      if (!currentFix && points.length) setCurrentFix(points[points.length - 1])
+    const syncStatus = (event: Event) => {
+      const status = (event as CustomEvent<LiveTrackStatus>).detail
+      setRawTrack(status.points)
+      setTracking(status.tracking)
+      if (status.points.length) setCurrentFix((current) => current ?? status.points[status.points.length - 1])
     }
-    sync()
-    const timer = window.setInterval(sync, 500)
+    window.addEventListener(LIVE_TRACK_STATUS_EVENT, syncStatus)
+    sendLiveTrackCommand('status')
+    return () => window.removeEventListener(LIVE_TRACK_STATUS_EVENT, syncStatus)
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 500)
     return () => window.clearInterval(timer)
-  }, [currentFix])
+  }, [])
 
   useEffect(() => {
     const shouldMonitor = tracking || followRoute || settings.proximityEnabled || settings.rotateMap
@@ -454,24 +449,24 @@ export default function LiveLocationPanel({
   const signalWeak = !signalLost && (currentFix?.accuracy ?? Number.POSITIVE_INFINITY) > settings.signalAccuracyLimit
   const signalText = signalLost ? 'SİNYAL YOK' : signalWeak ? 'ZAYIF' : currentFix ? 'İYİ' : 'BEKLİYOR'
 
-  const alertUser = (message: string, tone: 'error' | 'info' = 'error') => {
+  const alertUser = useCallback((message: string, tone: 'error' | 'info' = 'error') => {
     onMessage(message, tone)
     try { navigator.vibrate?.([180, 100, 180]) } catch { /* vibration unavailable */ }
-  }
+  }, [onMessage])
 
   useEffect(() => {
     if (!tracking || !settings.signalWarnings || (!signalLost && !signalWeak)) return
     if (now - lastSignalWarningRef.current < 30000) return
     lastSignalWarningRef.current = now
     alertUser(signalLost ? 'GNSS sinyali kayboldu.' : `GNSS hassasiyeti zayıf: ±${Math.round(currentFix?.accuracy ?? 0)} m.`)
-  }, [tracking, settings.signalWarnings, signalLost, signalWeak, now, currentFix])
+  }, [tracking, settings.signalWarnings, signalLost, signalWeak, now, currentFix, alertUser])
 
   useEffect(() => {
     if (!followRoute || !routeState || routeState.offRouteM <= settings.routeWarningDistance) return
     if (now - lastRouteWarningRef.current < 20000) return
     lastRouteWarningRef.current = now
     alertUser(`Rotadan ${Math.round(routeState.offRouteM)} m uzaklaştınız.`)
-  }, [followRoute, routeState, settings.routeWarningDistance, now])
+  }, [followRoute, routeState, settings.routeWarningDistance, now, alertUser])
 
   useEffect(() => {
     if (!settings.proximityEnabled || !activeTarget || targetDistanceM === null) return
@@ -485,7 +480,7 @@ export default function LiveLocationPanel({
     if (now - lastProximityWarningRef.current < 20000) return
     lastProximityWarningRef.current = now
     alertUser(`Hedefe yaklaştınız: ${formatDistance(targetDistanceM)} kaldı.`, 'info')
-  }, [settings.proximityEnabled, settings.proximityRadius, settings.proximityRepeat, settings.manualTargetId, settings.routeId, activeTarget, targetDistanceM, routeState, now])
+  }, [settings.proximityEnabled, settings.proximityRadius, settings.proximityRepeat, settings.manualTargetId, settings.routeId, activeTarget, targetDistanceM, routeState, now, alertUser])
 
   useEffect(() => {
     const canvas = document.querySelector<HTMLElement>('.map-canvas')
@@ -537,7 +532,7 @@ export default function LiveLocationPanel({
     startingRef.current = true
 
     if (mode === 'new') {
-      liveButton('clear')?.click()
+      sendLiveTrackCommand('clear')
       localStorage.removeItem(TRACK_STORAGE_KEY)
       setRawTrack([])
       setMeta({ startedAt: Date.now(), segmentBreaks: [0] })
@@ -547,31 +542,20 @@ export default function LiveLocationPanel({
 
     if (!locationCardEnabled) onEnsureLocationCard()
 
-    const tryStart = (attempt = 0) => {
-      const button = liveButton('start')
-      if (button) {
-        button.click()
-        startingRef.current = false
-        setTracking(true)
-        onMessage(mode === 'new' ? 'Yeni GPS kaydı başlatıldı.' : 'Son GPS kaydına devam ediliyor.', 'success')
-        return
-      }
-      if (attempt < 15) window.setTimeout(() => tryStart(attempt + 1), 100)
-      else {
-        startingRef.current = false
-        onMessage('Canlı takip başlatılamadı. Konum kartını ve konum iznini kontrol edin.', 'error')
-      }
-    }
-    window.setTimeout(() => tryStart(), locationCardEnabled ? 0 : 100)
+    window.setTimeout(() => {
+      sendLiveTrackCommand('start')
+      startingRef.current = false
+      setTracking(true)
+      onMessage(mode === 'new' ? 'Yeni GPS kaydı başlatıldı.' : 'Son GPS kaydına devam ediliyor.', 'success')
+    }, locationCardEnabled ? 0 : 100)
   }
 
   const stopRecorder = () => {
-    const button = liveButton('stop')
-    if (!button) {
+    if (!tracking) {
       onMessage('Aktif canlı takip bulunamadı.', 'info')
       return
     }
-    button.click()
+    sendLiveTrackCommand('stop')
     setTracking(false)
   }
 
@@ -584,9 +568,8 @@ export default function LiveLocationPanel({
 
   const clearTrack = () => {
     if (tracking) return
-    const button = liveButton('clear')
-    if (button) button.click()
-    else localStorage.removeItem(TRACK_STORAGE_KEY)
+    sendLiveTrackCommand('clear')
+    localStorage.removeItem(TRACK_STORAGE_KEY)
     setRawTrack([])
     setMeta({ startedAt: null, segmentBreaks: [0] })
   }
@@ -630,9 +613,6 @@ export default function LiveLocationPanel({
   return (
     <>
       <style>{`
-        .smart-location-controls button[aria-label="Canlı konum takibini başlat"],
-        .smart-location-controls button[aria-label="Canlı konum takibini durdur"],
-        .smart-location-controls button[aria-label="Canlı takip izini temizle"]{display:none!important}
         .live-location-panel .smart-sheet-body{padding-bottom:28px}
         .live-feature-number{width:34px;height:34px;display:inline-grid;place-items:center;border:1px solid rgba(16,185,129,.22);border-radius:12px;background:#e7f8f0;color:#087a50;box-shadow:0 0 16px rgba(16,185,129,.12);font-size:11px;font-weight:900}
         .live-status-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}

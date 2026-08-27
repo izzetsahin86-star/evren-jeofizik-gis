@@ -1,8 +1,9 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from 'react'
 import L, { type LeafletMouseEvent, type Map as LeafletMap } from 'leaflet'
 import { Circle, CircleMarker, MapContainer, Marker, Polygon, Polyline, TileLayer, Tooltip, useMapEvents } from 'react-leaflet'
-import { Check, Copy, Crosshair, LocateFixed, MousePointer2, Navigation, Plus, Ruler, Square, Trash2, Undo2 } from 'lucide-react'
+import { Check, Copy, Crosshair, LocateFixed, MousePointer2, Plus, Ruler, Trash2, Undo2 } from 'lucide-react'
 import { analyzePolygon, formatAreaShort, formatNumber, MAP_CENTER, pointBearing, pointDistance, toUtm, utmLatitudeBand } from '../geo'
+import { LIVE_TRACK_COMMAND_EVENT, sendLiveTrackStatus, type LiveTrackCommand } from '../liveTrackingBridge'
 import type { BaseLayerId, DisplaySettings, GeoPoint, PolygonLayer } from '../types'
 
 const tileLayers: Record<BaseLayerId, { url: string; attribution: string }> = {
@@ -479,6 +480,26 @@ export default function MapWorkspace({
     onMessage('Kayıtlı canlı konum izi temizlendi.', 'success')
   }
 
+  const liveTrackCommandRef = useRef<(command: LiveTrackCommand) => void>(() => undefined)
+  liveTrackCommandRef.current = (command) => {
+    if (command === 'start') startTracking()
+    else if (command === 'stop') stopTracking()
+    else if (command === 'clear') clearTrack()
+    else sendLiveTrackStatus({ tracking, points: trackPoints })
+  }
+
+  useEffect(() => {
+    const handleCommand = (event: Event) => {
+      liveTrackCommandRef.current((event as CustomEvent<LiveTrackCommand>).detail)
+    }
+    window.addEventListener(LIVE_TRACK_COMMAND_EVENT, handleCommand)
+    return () => window.removeEventListener(LIVE_TRACK_COMMAND_EVENT, handleCommand)
+  }, [])
+
+  useEffect(() => {
+    sendLiveTrackStatus({ tracking, points: trackPoints })
+  }, [tracking, trackPoints])
+
   const locate = () => {
     if (gpsPosition && !tracking) {
       setGpsPosition(null)
@@ -585,9 +606,7 @@ export default function MapWorkspace({
       {displaySettings.locationCard && (
         <div className="smart-location-controls">
           <button type="button" className={`locate-button tone-cyan${gpsPosition ? ' has-fix' : ''}`} onClick={locate} aria-label={gpsPosition && !tracking ? 'Konum göstergesini kapat' : 'Mevcut konumum'} aria-pressed={Boolean(gpsPosition)} title={gpsPosition && !tracking ? 'Konumu kapat' : tracking ? 'Canlı konuma dön' : 'Mevcut konumu bul'}><LocateFixed size={22} /></button>
-          <button type="button" className={`locate-button tone-green${tracking ? ' is-tracking' : ''}`} onClick={() => tracking ? stopTracking() : startTracking()} aria-label={tracking ? 'Canlı konum takibini durdur' : 'Canlı konum takibini başlat'} aria-pressed={tracking} title={tracking ? 'Canlı takibi durdur' : 'Canlı takibi başlat'}>{tracking ? <Square size={18} fill="currentColor" /> : <Navigation size={21} />}</button>
           {gpsPosition && <span className="gps-accuracy">±{formatNumber(gpsPosition.accuracy, 0)} m{tracking || trackPoints.length ? ` · ${tracking ? 'CANLI · ' : ''}${trackPoints.length} pkt · ${formatTrackDistance(trackDistanceM)}` : ''}</span>}
-          {trackPoints.length > 0 && !tracking && <button type="button" className="locate-button tone-rose" onClick={clearTrack} aria-label="Canlı takip izini temizle" title="Takip izini temizle"><Trash2 size={18} /></button>}
         </div>
       )}
       <div className="map-crosshair" aria-hidden="true"><Plus size={28} strokeWidth={1.8} /></div>

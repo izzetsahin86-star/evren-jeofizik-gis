@@ -50,6 +50,8 @@ import {
 } from '../geo'
 import { exportProjectPdf } from '../report'
 import type { BaseLayerId, CoordinateFormat, DisplaySettings, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer } from '../types'
+import { DEFAULT_EXPORT_POLYGON_STYLE } from '../exportStyle'
+import ExportPolygonStyleControls from './ExportPolygonStyleControls'
 import { Card, EmptyState, Field, Segmented } from './PanelUi'
 
 const coordinateOptions: Array<{ value: CoordinateFormat; label: string }> = [
@@ -604,6 +606,7 @@ function ExportPanel(props: BottomPanelProps) {
   const [reportNotes, setReportNotes] = useState('')
   const [includeMap, setIncludeMap] = useState(true)
   const [reportBusy, setReportBusy] = useState(false)
+  const [exportStyle, setExportStyle] = useState(DEFAULT_EXPORT_POLYGON_STYLE)
   const totalPoints = props.polygons.reduce((sum, layer) => sum + layer.points.length, 0)
   const safeName = filename.trim().replace(/[^a-zA-Z0-9ğüşöçıİĞÜŞÖÇ_-]+/g, '-') || 'evren-jeofizik-projesi'
 
@@ -624,10 +627,11 @@ function ExportPanel(props: BottomPanelProps) {
       <Card title="Dışa Aktar" subtitle={`Tüm poligonlar · ${props.polygons.length} katman`} icon={<Download size={19} />}>
         <Field label="Dosya adı"><input value={filename} onChange={(event) => setFilename(event.target.value)} placeholder="polygon_1" /></Field>
         <Field label="CSV Formatı"><select value={csvFormat} onChange={(event) => setCsvFormat(event.target.value as CoordinateFormat)}>{coordinateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Field>
+        <ExportPolygonStyleControls value={exportStyle} onChange={setExportStyle} />
         <div className="export-grid">
-          <button type="button" disabled={!totalPoints} onClick={() => downloadBlob(polygonsToKml(props.polygons), `${safeName}.kml`, 'application/vnd.google-earth.kml+xml')}><FileDown size={20} /><strong>KML</strong></button>
-          <button type="button" disabled={!totalPoints} onClick={() => downloadKmz(props.polygons, safeName)}><FileDown size={20} /><strong>KMZ</strong></button>
-          <button type="button" disabled={!totalPoints} onClick={() => downloadBlob(JSON.stringify(polygonsToGeoJson(props.polygons), null, 2), `${safeName}.geojson`, 'application/geo+json')}><FileDown size={20} /><strong>GeoJSON</strong></button>
+          <button type="button" disabled={!totalPoints} onClick={() => downloadBlob(polygonsToKml(props.polygons, exportStyle), `${safeName}.kml`, 'application/vnd.google-earth.kml+xml')}><FileDown size={20} /><strong>KML</strong></button>
+          <button type="button" disabled={!totalPoints} onClick={() => downloadKmz(props.polygons, safeName, exportStyle)}><FileDown size={20} /><strong>KMZ</strong></button>
+          <button type="button" disabled={!totalPoints} onClick={() => downloadBlob(JSON.stringify(polygonsToGeoJson(props.polygons, exportStyle), null, 2), `${safeName}.geojson`, 'application/geo+json')}><FileDown size={20} /><strong>GeoJSON</strong></button>
           <button type="button" disabled={!totalPoints} onClick={() => downloadBlob(polygonsToCsv(props.polygons, csvFormat), `${safeName}.csv`, 'text/csv;charset=utf-8')}><FileDown size={20} /><strong>CSV</strong></button>
         </div>
         {!totalPoints && <p className="form-note warning">Dışa aktarmak için koordinat ekleyin.</p>}

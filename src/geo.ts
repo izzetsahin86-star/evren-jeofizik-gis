@@ -9,7 +9,7 @@ import {
   polygon as turfPolygon,
 } from '@turf/turf'
 import proj4 from 'proj4'
-import type { AnalysisResult, CoordinateFormat, GeoPoint, PolygonLayer } from './types'
+import type { AnalysisResult, CoordinateFormat, ExportPolygonStyle, GeoPoint, PolygonLayer } from './types'
 
 export const MAP_CENTER: [number, number] = [39.9255, 32.8663]
 export const POLYGON_COLORS = ['#1597e5', '#7c3aed', '#f59e0b', '#10b981', '#ef4444', '#ec4899']
@@ -197,32 +197,63 @@ function xmlEscape(value: string) {
   return value.replace(/[<>&'"]/g, (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[char]!)
 }
 
-export function polygonsToKml(polygons: PolygonLayer[]) {
-  const placemarks = polygons.map((layer) => {
+function hexToKmlColor(hex: string, opacity: number) {
+  const normalized = hex.replace('#', '')
+  const expanded = normalized.length === 3 ? normalized.split('').map((part) => `${part}${part}`).join('') : normalized
+  const safe = /^[0-9a-f]{6}$/i.test(expanded) ? expanded : '1597e5'
+  const alpha = Math.round(Math.max(0, Math.min(1, opacity)) * 255).toString(16).padStart(2, '0')
+  return `${alpha}${safe.slice(4, 6)}${safe.slice(2, 4)}${safe.slice(0, 2)}`.toLowerCase()
+}
+
+function exportAppearance(layer: PolygonLayer, style?: ExportPolygonStyle) {
+  return {
+    strokeColor: style?.strokeColor ?? layer.color,
+    strokeWidth: style?.strokeWidth ?? layer.strokeWidth ?? DEFAULT_POLYGON_APPEARANCE.strokeWidth,
+    strokeOpacity: style ? 1 : layer.strokeOpacity ?? DEFAULT_POLYGON_APPEARANCE.strokeOpacity,
+    fillColor: style?.fillColor ?? layer.color,
+    fillOpacity: style?.fillOpacity ?? layer.fillOpacity ?? DEFAULT_POLYGON_APPEARANCE.fillOpacity,
+  }
+}
+
+export function polygonsToKml(polygons: PolygonLayer[], style?: ExportPolygonStyle) {
+  const styles = polygons.map((layer, index) => {
+    const appearance = exportAppearance(layer, style)
+    return `<Style id="evren-polygon-${index}"><LineStyle><color>${hexToKmlColor(appearance.strokeColor, appearance.strokeOpacity)}</color><width>${appearance.strokeWidth}</width></LineStyle><PolyStyle><color>${hexToKmlColor(appearance.fillColor, appearance.fillOpacity)}</color><fill>1</fill><outline>1</outline></PolyStyle></Style>`
+  }).join('')
+  const placemarks = polygons.map((layer, index) => {
     const coordinates = layer.points.map((p) => `${p.lng},${p.lat},0`).join(' ')
     const ring = layer.points.length ? `${coordinates} ${layer.points[0].lng},${layer.points[0].lat},0` : coordinates
     const des = layer.desPoints.map((p) => `<Placemark><name>${xmlEscape(p.name || 'DES')}</name><Point><coordinates>${p.lng},${p.lat},0</coordinates></Point></Placemark>`).join('')
     const geometry = layer.points.length >= 3
       ? `<Polygon><outerBoundaryIs><LinearRing><coordinates>${ring}</coordinates></LinearRing></outerBoundaryIs></Polygon>`
       : `<LineString><coordinates>${coordinates}</coordinates></LineString>`
-    return `<Folder><name>${xmlEscape(layer.name)}</name><Placemark><name>${xmlEscape(layer.name)}</name>${geometry}</Placemark>${des}</Folder>`
+    return `<Folder><name>${xmlEscape(layer.name)}</name><Placemark><name>${xmlEscape(layer.name)}</name><styleUrl>#evren-polygon-${index}</styleUrl>${geometry}</Placemark>${des}</Folder>`
   }).join('')
-  return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Evren Jeofizik</name>${placemarks}</Document></kml>`
+  return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Evren Jeofizik</name>${styles}${placemarks}</Document></kml>`
 }
 
-export function polygonsToGeoJson(polygons: PolygonLayer[]) {
+export function polygonsToGeoJson(polygons: PolygonLayer[], style?: ExportPolygonStyle) {
   return {
     type: 'FeatureCollection',
     features: polygons.filter((layer) => layer.points.length).map((layer) => ({
       type: 'Feature',
-      properties: {
+      properties: (() => {
+        const appearance = exportAppearance(layer, style)
+        return {
         id: layer.id,
         name: layer.name,
-        color: layer.color,
-        strokeWidth: layer.strokeWidth ?? DEFAULT_POLYGON_APPEARANCE.strokeWidth,
-        strokeOpacity: layer.strokeOpacity ?? DEFAULT_POLYGON_APPEARANCE.strokeOpacity,
-        fillOpacity: layer.fillOpacity ?? DEFAULT_POLYGON_APPEARANCE.fillOpacity,
-      },
+        color: appearance.strokeColor,
+        fillColor: appearance.fillColor,
+        strokeWidth: appearance.strokeWidth,
+        strokeOpacity: appearance.strokeOpacity,
+        fillOpacity: appearance.fillOpacity,
+        stroke: appearance.strokeColor,
+        'stroke-width': appearance.strokeWidth,
+        'stroke-opacity': appearance.strokeOpacity,
+        fill: appearance.fillColor,
+        'fill-opacity': appearance.fillOpacity,
+        }
+      })(),
       geometry: layer.points.length >= 3
         ? { type: 'Polygon', coordinates: [[...layer.points.map((p) => [p.lng, p.lat]), [layer.points[0].lng, layer.points[0].lat]]] }
         : { type: 'LineString', coordinates: layer.points.map((p) => [p.lng, p.lat]) },
@@ -386,10 +417,10 @@ export function downloadBlob(content: BlobPart, filename: string, type: string) 
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-export async function downloadKmz(polygons: PolygonLayer[], filename: string) {
+export async function downloadKmz(polygons: PolygonLayer[], filename: string, style?: ExportPolygonStyle) {
   const { default: JSZip } = await import('jszip')
   const zip = new JSZip()
-  zip.file('doc.kml', polygonsToKml(polygons))
+  zip.file('doc.kml', polygonsToKml(polygons, style))
   downloadBlob(await zip.generateAsync({ type: 'blob' }), `${filename}.kmz`, 'application/vnd.google-earth.kmz')
 }
 

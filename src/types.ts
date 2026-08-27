@@ -38,6 +38,13 @@ export interface PolygonAppearance {
   fillOpacity: number
 }
 
+export interface ExportPolygonStyle {
+  strokeWidth: number
+  strokeColor: string
+  fillOpacity: number
+  fillColor: string
+}
+
 export interface AnalysisResult {
   areaM2: number
   perimeterM: number

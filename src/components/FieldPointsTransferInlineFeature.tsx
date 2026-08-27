@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
 import JSZip from 'jszip'
 import { CheckCircle2, FileDown, Upload, X } from 'lucide-react'
+import { DEFAULT_EXPORT_POLYGON_STYLE } from '../exportStyle'
 import { formatPoint, polygonsToGeoJson, polygonsToKml, readSpatialFile } from '../geo'
-import type { CoordinateFormat, PolygonLayer } from '../types'
+import type { CoordinateFormat, ExportPolygonStyle, PolygonLayer } from '../types'
+import ExportPolygonStyleControls from './ExportPolygonStyleControls'
 
 const FIELD_POINTS_KEY = 'evren-jeofizik-gis-field-points-v1'
 const WORKSPACE_KEY = 'evren-jeofizik-gis-workspace-v1'
@@ -131,15 +133,15 @@ function fieldPointPlacemark(point: FieldPoint) {
   return `<Placemark><name>${xmlEscape(point.name)}</name><description>${xmlEscape(point.description)}</description><ExtendedData><Data name="evren:type"><value>field-point</value></Data><Data name="evren:symbol"><value>${xmlEscape(point.symbol)}</value></Data><Data name="evren:note"><value>${xmlEscape(point.note)}</value></Data><Data name="evren:description"><value>${xmlEscape(point.description)}</value></Data><Data name="evren:createdAt"><value>${point.createdAt}</value></Data><Data name="evren:updatedAt"><value>${point.updatedAt}</value></Data></ExtendedData><Point><coordinates>${point.lng},${point.lat},0</coordinates></Point></Placemark>`
 }
 
-function combinedKml(polygons: PolygonLayer[], points: FieldPoint[]) {
+function combinedKml(polygons: PolygonLayer[], points: FieldPoint[], style?: ExportPolygonStyle) {
   const spatial = polygons.filter((layer) => layer.points.length || layer.desPoints.length)
   const field = points.map(fieldPointPlacemark).join('')
   if (!spatial.length) return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Evren Jeofizik</name>${field}</Document></kml>`
-  return polygonsToKml(spatial).replace('</Document>', `${field}</Document>`)
+  return polygonsToKml(spatial, style).replace('</Document>', `${field}</Document>`)
 }
 
-function combinedGeoJson(polygons: PolygonLayer[], points: FieldPoint[]) {
-  const spatial = polygonsToGeoJson(polygons.filter((layer) => layer.points.length)) as { type: string; features: any[] }
+function combinedGeoJson(polygons: PolygonLayer[], points: FieldPoint[], style?: ExportPolygonStyle) {
+  const spatial = polygonsToGeoJson(polygons.filter((layer) => layer.points.length), style) as { type: string; features: any[] }
   const desFeatures = polygons.flatMap((layer) => layer.desPoints.map((point) => ({
     type: 'Feature',
     geometry: { type: 'Point', coordinates: [point.lng, point.lat] },
@@ -344,10 +346,12 @@ export default function FieldPointsTransferInlineFeature() {
   const [reading, setReading] = useState(false)
   const [filename, setFilename] = useState('evren-jeofizik-projesi')
   const [csvFormat, setCsvFormat] = useState<CoordinateFormat>('latlon')
+  const [exportStyle, setExportStyle] = useState(DEFAULT_EXPORT_POLYGON_STYLE)
   const [fieldCount, setFieldCount] = useState(() => readStoredPoints().length)
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null)
 
   const projectStats = useMemo(() => {
+    if (!panel) return { layers: 0, polygonPoints: 0, des: 0, field: fieldCount }
     const polygons = readStoredPolygons()
     return {
       layers: polygons.filter((layer) => layer.points.length).length,
@@ -492,13 +496,13 @@ export default function FieldPointsTransferInlineFeature() {
       return
     }
     const name = safeName(filename)
-    if (format === 'kml') downloadBlob(combinedKml(polygons, points), `${name}.kml`, 'application/vnd.google-earth.kml+xml;charset=utf-8')
+    if (format === 'kml') downloadBlob(combinedKml(polygons, points, exportStyle), `${name}.kml`, 'application/vnd.google-earth.kml+xml;charset=utf-8')
     if (format === 'kmz') {
       const zip = new JSZip()
-      zip.file('doc.kml', combinedKml(polygons, points))
+      zip.file('doc.kml', combinedKml(polygons, points, exportStyle))
       downloadBlob(await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } }), `${name}.kmz`, 'application/vnd.google-earth.kmz')
     }
-    if (format === 'geojson') downloadBlob(JSON.stringify(combinedGeoJson(polygons, points), null, 2), `${name}.geojson`, 'application/geo+json;charset=utf-8')
+    if (format === 'geojson') downloadBlob(JSON.stringify(combinedGeoJson(polygons, points, exportStyle), null, 2), `${name}.geojson`, 'application/geo+json;charset=utf-8')
     if (format === 'csv') downloadBlob(combinedCsv(polygons, points, csvFormat), `${name}.csv`, 'text/csv;charset=utf-8')
     if (format === 'gpx') downloadBlob(combinedGpx(polygons, points), `${name}.gpx`, 'application/gpx+xml;charset=utf-8')
     setMessage({ text: `Tüm proje verileri ${format.toUpperCase()} olarak tek dosyada hazırlandı.` })
@@ -551,6 +555,7 @@ export default function FieldPointsTransferInlineFeature() {
       <div className="unified-transfer-summary"><span><small>Katman</small><strong>{projectStats.layers}</strong></span><span><small>Koordinat</small><strong>{projectStats.polygonPoints}</strong></span><span><small>DES</small><strong>{projectStats.des}</strong></span><span><small>Saha Noktası</small><strong>{projectStats.field}</strong></span></div>
       <label className="unified-transfer-field"><span>Dosya adı</span><input value={filename} onChange={(event) => setFilename(event.target.value)} placeholder="evren-jeofizik-projesi" /></label>
       <label className="unified-transfer-field"><span>CSV Koordinat Formatı</span><select value={csvFormat} onChange={(event) => setCsvFormat(event.target.value as CoordinateFormat)}>{COORDINATE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+      <ExportPolygonStyleControls value={exportStyle} onChange={setExportStyle} />
       <div className="unified-export-grid">
         <button type="button" onClick={() => void exportProject('kml')}><FileDown size={19} />KML</button>
         <button type="button" onClick={() => void exportProject('kmz')}><FileDown size={19} />KMZ</button>

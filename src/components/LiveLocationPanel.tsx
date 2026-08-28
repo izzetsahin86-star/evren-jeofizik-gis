@@ -7,6 +7,8 @@ import {
   Compass,
   FileArchive,
   FileDown,
+  History,
+  Eye,
   LocateFixed,
   Navigation,
   Pause,
@@ -23,6 +25,7 @@ import {
 import type { PolygonLayer } from '../types'
 import { LIVE_TRACK_STATUS_EVENT, sendLiveTrackCommand, type LiveTrackStatus } from '../liveTrackingBridge'
 import { downloadRouteKml, downloadRouteKmz } from '../routeExport'
+import { addRouteToArchive, readRouteArchive, removeRouteFromArchive, type RouteArchiveItem } from '../routeArchive'
 import { Card, Field, SheetHeader } from './PanelUi'
 
 const TRACK_STORAGE_KEY = 'evren-jeofizik-gis-live-track-v1'
@@ -59,7 +62,11 @@ type LiveSettings = {
 
 type RecorderMeta = {
   startedAt: number | null
+  finishedAt: number | null
+  pausedAt: number | null
+  totalPausedMs: number
   segmentBreaks: number[]
+  status: 'idle' | 'recording' | 'paused' | 'finished'
 }
 
 interface LiveLocationPanelProps {
@@ -110,12 +117,22 @@ function readSettings(): LiveSettings {
 function readMeta(): RecorderMeta {
   try {
     const value = JSON.parse(localStorage.getItem(LIVE_META_KEY) || '{}') as Partial<RecorderMeta>
+    const hasTrack = readTrack().length > 0
+    const status: RecorderMeta['status'] = value.status === 'recording' && hasTrack
+      ? 'paused'
+      : value.status === 'paused' || value.status === 'finished'
+        ? value.status
+        : hasTrack ? 'finished' : 'idle'
     return {
       startedAt: typeof value.startedAt === 'number' ? value.startedAt : null,
+      finishedAt: typeof value.finishedAt === 'number' ? value.finishedAt : null,
+      pausedAt: typeof value.pausedAt === 'number' ? value.pausedAt : status === 'paused' ? Date.now() : null,
+      totalPausedMs: typeof value.totalPausedMs === 'number' ? Math.max(0, value.totalPausedMs) : 0,
       segmentBreaks: Array.isArray(value.segmentBreaks) && value.segmentBreaks.length ? value.segmentBreaks.filter(Number.isFinite) : [0],
+      status,
     }
   } catch {
-    return { startedAt: null, segmentBreaks: [0] }
+    return { startedAt: null, finishedAt: null, pausedAt: null, totalPausedMs: 0, segmentBreaks: [0], status: 'idle' }
   }
 }
 
@@ -201,6 +218,13 @@ function filterStationary(points: TrackPoint[], enabled: boolean) {
   return result
 }
 
+function splitTrackPoints(points: TrackPoint[], segmentBreaks: number[]) {
+  const starts = Array.from(new Set([0, ...segmentBreaks]))
+    .filter((index) => Number.isInteger(index) && index >= 0 && index < points.length)
+    .sort((a, b) => a - b)
+  return starts.map((start, index) => points.slice(start, starts[index + 1] ?? points.length)).filter((segment) => segment.length)
+}
+
 function trackDistance(points: TrackPoint[]) {
   return points.slice(1).reduce((sum, point, index) => sum + distanceMeters(points[index], point), 0)
 }
@@ -227,7 +251,9 @@ export default function LiveLocationPanel({
   const [settings, setSettings] = useState<LiveSettings>(readSettings)
   const [meta, setMeta] = useState<RecorderMeta>(readMeta)
   const [tracking, setTracking] = useState(false)
-  const [now, setNow] = useState(Date.now())
+  const [now, setNow] = useState(() => Date.now())
+  const [rejectedCount, setRejectedCount] = useState(0)
+  const [routeArchive, setRouteArchive] = useState<RouteArchiveItem[]>(readRouteArchive)
   const [currentFix, setCurrentFix] = useState<TrackPoint | null>(() => readTrack().at(-1) ?? null)
   const [followRoute, setFollowRoute] = useState(false)
   const [compassActive, setCompassActive] = useState(false)
@@ -254,6 +280,7 @@ export default function LiveLocationPanel({
 
   useEffect(() => {
     localStorage.setItem(LIVE_META_KEY, JSON.stringify(meta))
+    sendLiveTrackCommand({ type: 'segments', segmentBreaks: meta.segmentBreaks })
   }, [meta])
 
   useEffect(() => {
@@ -266,6 +293,7 @@ export default function LiveLocationPanel({
       const status = (event as CustomEvent<LiveTrackStatus>).detail
       setRawTrack(status.points)
       setTracking(status.tracking)
+      setRejectedCount(status.rejectedCount)
       if (status.points.length) setCurrentFix((current) => current ?? status.points[status.points.length - 1])
     }
     window.addEventListener(LIVE_TRACK_STATUS_EVENT, syncStatus)
@@ -355,17 +383,22 @@ export default function LiveLocationPanel({
     return () => window.removeEventListener('deviceorientation', handler, true)
   }, [compassActive])
 
-  const trackPoints = useMemo(() => filterStationary(rawTrack, settings.skipStationary), [rawTrack, settings.skipStationary])
-  const totalDistanceM = useMemo(() => trackDistance(trackPoints), [trackPoints])
-  const segmentStart = meta.segmentBreaks.at(-1) ?? 0
-  const segmentPoints = useMemo(
-    () => filterStationary(rawTrack.slice(Math.min(segmentStart, rawTrack.length)), settings.skipStationary),
-    [rawTrack, segmentStart, settings.skipStationary],
+  const filteredTrackSegments = useMemo(
+    () => splitTrackPoints(rawTrack, meta.segmentBreaks).map((segment) => filterStationary(segment, settings.skipStationary)),
+    [rawTrack, meta.segmentBreaks, settings.skipStationary],
   )
+  const trackPoints = useMemo(() => filteredTrackSegments.flat(), [filteredTrackSegments])
+  const totalDistanceM = useMemo(() => filteredTrackSegments.reduce((total, segment) => total + trackDistance(segment), 0), [filteredTrackSegments])
+  const segmentPoints = useMemo(() => filteredTrackSegments.at(-1) ?? [], [filteredTrackSegments])
   const segmentDistanceM = useMemo(() => trackDistance(segmentPoints), [segmentPoints])
   const firstTimestamp = meta.startedAt ?? trackPoints[0]?.timestamp ?? null
   const lastTimestamp = trackPoints.at(-1)?.timestamp ?? null
-  const elapsedMs = firstTimestamp ? Math.max(0, (tracking ? now : (lastTimestamp ?? now)) - firstTimestamp) : 0
+  const recorderEnd = tracking
+    ? now
+    : meta.status === 'paused'
+      ? (meta.pausedAt ?? lastTimestamp ?? now)
+      : (meta.finishedAt ?? lastTimestamp ?? now)
+  const elapsedMs = firstTimestamp ? Math.max(0, recorderEnd - firstTimestamp - meta.totalPausedMs) : 0
   const currentSpeedKmh = currentFix?.speed !== null && currentFix?.speed !== undefined && Number.isFinite(currentFix.speed)
     ? Math.max(0, currentFix.speed * 3.6)
     : 0
@@ -539,14 +572,31 @@ export default function LiveLocationPanel({
     }
     if (tracking || startingRef.current) return
     startingRef.current = true
+    const startedAt = Date.now()
 
     if (mode === 'new') {
       sendLiveTrackCommand('clear')
       localStorage.removeItem(TRACK_STORAGE_KEY)
       setRawTrack([])
-      setMeta({ startedAt: Date.now(), segmentBreaks: [0] })
-    } else if (!meta.startedAt) {
-      setMeta({ startedAt: rawTrack[0]?.timestamp ?? Date.now(), segmentBreaks: meta.segmentBreaks.length ? meta.segmentBreaks : [0] })
+      setRejectedCount(0)
+      setExportName(defaultRouteName())
+      setMeta({ startedAt, finishedAt: null, pausedAt: null, totalPausedMs: 0, segmentBreaks: [0], status: 'recording' })
+    } else {
+      setMeta((current) => {
+        const pauseDuration = current.pausedAt ? Math.max(0, startedAt - current.pausedAt) : 0
+        const segmentBreaks = current.segmentBreaks.at(-1) === rawTrack.length
+          ? current.segmentBreaks
+          : [...current.segmentBreaks.filter((value) => value < rawTrack.length), rawTrack.length]
+        return {
+          ...current,
+          startedAt: current.startedAt ?? rawTrack[0]?.timestamp ?? startedAt,
+          finishedAt: null,
+          pausedAt: null,
+          totalPausedMs: current.totalPausedMs + pauseDuration,
+          segmentBreaks,
+          status: 'recording',
+        }
+      })
     }
 
     if (!locationCardEnabled) onEnsureLocationCard()
@@ -555,17 +605,48 @@ export default function LiveLocationPanel({
       sendLiveTrackCommand('start')
       startingRef.current = false
       setTracking(true)
-      onMessage(mode === 'new' ? 'Yeni GPS kaydı başlatıldı.' : 'Son GPS kaydına devam ediliyor.', 'success')
+      onMessage(mode === 'new' ? 'Yeni GPS kaydı başlatıldı.' : 'Duraklatılan GPS kaydına devam ediliyor.', 'success')
     }, locationCardEnabled ? 0 : 100)
   }
 
-  const stopRecorder = () => {
+  const pauseRecorder = () => {
     if (!tracking) {
       onMessage('Aktif canlı takip bulunamadı.', 'info')
       return
     }
     sendLiveTrackCommand('stop')
     setTracking(false)
+    setMeta((current) => ({ ...current, pausedAt: Date.now(), status: 'paused' }))
+    onMessage('Rota kaydı duraklatıldı. Devam edildiğinde yeni segment açılacak.', 'info')
+  }
+
+  const finishRecorder = () => {
+    if (!tracking && meta.status !== 'paused') return
+    if (tracking) sendLiveTrackCommand('stop')
+    setTracking(false)
+    const finishedAt = Date.now()
+    const totalPausedMs = meta.totalPausedMs + (meta.pausedAt ? Math.max(0, finishedAt - meta.pausedAt) : 0)
+    setMeta((current) => ({ ...current, finishedAt, pausedAt: null, totalPausedMs, status: 'finished' }))
+    if (rawTrack.length < 2) {
+      onMessage('Kayıt bitirildi; arşiv için en az 2 GPS noktası gerekir.', 'info')
+      return
+    }
+    try {
+      const { items } = addRouteToArchive({
+        name: exportName.trim() || defaultRouteName(),
+        points: rawTrack,
+        segmentBreaks: meta.segmentBreaks,
+        startedAt: meta.startedAt ?? rawTrack[0]?.timestamp ?? finishedAt,
+        finishedAt,
+        totalPausedMs,
+        distanceM: totalDistanceM,
+        rejectedCount,
+      })
+      setRouteArchive(items)
+      onMessage('Rota bitirildi ve cihazdaki rota arşivine kaydedildi.', 'success')
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : 'Rota arşive kaydedilemedi.', 'error')
+    }
   }
 
   const newSegment = () => {
@@ -580,11 +661,12 @@ export default function LiveLocationPanel({
     sendLiveTrackCommand('clear')
     localStorage.removeItem(TRACK_STORAGE_KEY)
     setRawTrack([])
-    setMeta({ startedAt: null, segmentBreaks: [0] })
+    setRejectedCount(0)
+    setMeta({ startedAt: null, finishedAt: null, pausedAt: null, totalPausedMs: 0, segmentBreaks: [0], status: 'idle' })
   }
 
   const exportKml = () => {
-    if (tracking || rawTrack.length < 2 || !exportName.trim()) return
+    if (meta.status !== 'finished' || rawTrack.length < 2 || !exportName.trim()) return
     try {
       downloadRouteKml(exportName, rawTrack, meta.segmentBreaks)
       onMessage('Rota KML olarak dışa aktarıldı.', 'success')
@@ -594,13 +676,38 @@ export default function LiveLocationPanel({
   }
 
   const exportKmz = async () => {
-    if (tracking || rawTrack.length < 2 || !exportName.trim()) return
+    if (meta.status !== 'finished' || rawTrack.length < 2 || !exportName.trim()) return
     try {
       await downloadRouteKmz(exportName, rawTrack, meta.segmentBreaks)
       onMessage('Rota KMZ olarak dışa aktarıldı.', 'success')
     } catch {
       onMessage('KMZ dışa aktarımı başlatılamadı.', 'error')
     }
+  }
+
+  const openArchivedRoute = (item: RouteArchiveItem) => {
+    if (tracking) return
+    setRawTrack(item.points)
+    setRejectedCount(item.rejectedCount)
+    setExportName(item.name)
+    setMeta({
+      startedAt: item.startedAt,
+      finishedAt: item.finishedAt,
+      pausedAt: null,
+      totalPausedMs: item.totalPausedMs,
+      segmentBreaks: item.segmentBreaks,
+      status: 'finished',
+    })
+    sendLiveTrackCommand({ type: 'load', points: item.points, segmentBreaks: item.segmentBreaks, rejectedCount: item.rejectedCount })
+    const first = item.points[0]
+    onFlyTo({ lat: first.lat, lng: first.lng, zoom: 16 })
+    onMessage(`${item.name} haritada açıldı.`, 'success')
+  }
+
+  const deleteArchivedRoute = (item: RouteArchiveItem) => {
+    if (!window.confirm(`“${item.name}” rota kaydı arşivden silinsin mi?`)) return
+    setRouteArchive(removeRouteFromArchive(item.id))
+    onMessage(`${item.name} rota arşivinden silindi.`, 'info')
   }
 
   const requestCompass = async () => {
@@ -645,6 +752,7 @@ export default function LiveLocationPanel({
         .live-action-grid button.primary,.live-wide-button.primary{color:#fff;border-color:#159465;background:linear-gradient(135deg,#22b47d,#07845a);box-shadow:0 6px 16px rgba(5,150,105,.2)}
         .live-action-grid button.stop{color:#fff;border-color:#e05252;background:linear-gradient(135deg,#f06a6a,#d83f4c)}
         .live-action-grid button.blue,.live-wide-button.blue{color:#fff;border-color:#2877dc;background:linear-gradient(135deg,#3b8bea,#2563c9)}
+        .live-action-grid button.amber{color:#fff;border-color:#d89016;background:linear-gradient(135deg,#f3ad31,#ce7d08)}
         .live-action-grid button:disabled,.live-wide-button:disabled{opacity:.4;cursor:not-allowed}
         .live-inline-note{display:flex;align-items:flex-start;gap:6px;margin:8px 0 0;color:#7b899b;font-size:9px;line-height:1.4}
         .live-inline-note.warning{color:#a76216}
@@ -661,6 +769,8 @@ export default function LiveLocationPanel({
         .live-signal span{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:800}.live-signal small{font-size:8px;color:inherit;opacity:.8}
         .live-progress{height:7px;overflow:hidden;border-radius:999px;background:#edf1f5;margin-top:8px}.live-progress span{display:block;height:100%;background:#2877dc}
         .live-route-status{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}.live-route-status span{min-height:52px;display:grid;align-content:center;padding:8px;border:1px solid #e3eaf1;border-radius:13px;background:#f7f9fb}.live-route-status small{display:block;color:#8b97a7;font-size:8px}.live-route-status strong{font-size:10px}
+        .live-archive-list{display:grid;gap:8px}.live-archive-item{padding:10px;border:1px solid #e0e8ef;border-radius:15px;background:linear-gradient(145deg,#f7fafc,#fff);box-shadow:0 3px 10px rgba(15,23,42,.04)}
+        .live-archive-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.live-archive-head span{min-width:0;display:grid;gap:3px}.live-archive-head strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}.live-archive-head small{color:#8492a4;font-size:8px}.live-archive-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin-top:8px}.live-archive-actions button{min-height:38px;display:flex;align-items:center;justify-content:center;gap:4px;padding:4px;border:1px solid #dce5ed;border-radius:11px;background:#f3f7fa;color:#52647a;font-size:8px;font-weight:800;cursor:pointer}.live-archive-actions button:active{transform:scale(.94)}.live-archive-actions button.danger{color:#c23d4b;background:#fff2f3;border-color:#f1cfd3}
         .live-target-card{display:grid;grid-template-columns:76px 1fr;gap:10px;align-items:center;margin-top:9px;padding:9px;border-radius:12px;background:#f7fbff;border:1px solid #e3edf7}
         .live-target-arrow{width:72px;height:72px;display:grid;place-items:center;border-radius:50%;border:1px solid #d8e5f1;background:#fff;position:relative}
         .live-target-arrow svg{color:#2877dc;transform:rotate(var(--target-bearing,0deg));transition:transform .2s linear}
@@ -685,7 +795,7 @@ export default function LiveLocationPanel({
                   <small>{currentFix ? `±${Math.round(currentFix.accuracy ?? 0)} m · ${monitorMessage}` : monitorMessage}</small>
                 </div>
                 <div className="live-status-row" style={{ marginTop: 8 }}>
-                  <div className="live-status-cell"><small>Takip</small><strong>{tracking ? 'CANLI' : 'Kapalı'}</strong></div>
+                  <div className="live-status-cell"><small>Takip</small><strong>{tracking ? 'CANLI' : meta.status === 'paused' ? 'DURAKLATILDI' : meta.status === 'finished' ? 'BİTTİ' : 'Kapalı'}</strong></div>
                   <div className="live-status-cell"><small>Ekran Kilidi</small><strong>{wakeLockActive ? 'Korunuyor' : tracking ? 'Tarayıcıya bağlı' : '—'}</strong></div>
                   <div className="live-status-cell"><small>Son Fix</small><strong>{Number.isFinite(fixAgeMs) ? `${Math.round(fixAgeMs / 1000)} sn` : '—'}</strong></div>
                   <div className="live-status-cell"><small>Kaynak</small><strong>GNSS</strong></div>
@@ -703,37 +813,61 @@ export default function LiveLocationPanel({
                   <div className="live-status-cell"><small>Maks. Hız</small><strong>{maxSpeedKmh.toFixed(1)} km/sa</strong></div>
                   <div className="live-status-cell"><small>Segment</small><strong>{meta.segmentBreaks.length}</strong></div>
                   <div className="live-status-cell"><small>Bu Segment</small><strong>{formatDistance(segmentDistanceM)}</strong></div>
+                  <div className="live-status-cell"><small>GPS Temizleme</small><strong>{rejectedCount} sıçrama</strong></div>
                 </div>
                 {rawTrack.length ? <Field label="Rota dosya adı"><input type="text" value={exportName} onChange={(event) => setExportName(event.target.value)} maxLength={120} autoComplete="off" /></Field> : null}
                 <div className="live-action-grid">
                   {tracking ? (
                     <>
-                      <button type="button" className="stop" onClick={stopRecorder}><Square size={14} fill="currentColor" /> Durdur</button>
+                      <button type="button" className="amber" onClick={pauseRecorder}><Pause size={14} fill="currentColor" /> Duraklat</button>
+                      <button type="button" className="stop" onClick={finishRecorder}><Square size={14} fill="currentColor" /> Kaydı Bitir</button>
                       <button type="button" className="blue" onClick={newSegment}><Plus size={14} /> Yeni Segment / Tur</button>
                     </>
-                  ) : rawTrack.length ? (
+                  ) : meta.status === 'paused' ? (
                     <>
-                      <button type="button" className="primary" onClick={() => startRecorder('resume')}><Play size={14} /> Son Kayda Devam</button>
-                      <button type="button" className="blue" onClick={() => startRecorder('new')}><RefreshCw size={14} /> Yeni Kayıt</button>
+                      <button type="button" className="primary" onClick={() => startRecorder('resume')}><Play size={14} /> Kayda Devam</button>
+                      <button type="button" className="stop" onClick={finishRecorder}><Square size={14} fill="currentColor" /> Kaydı Bitir</button>
                     </>
+                  ) : rawTrack.length ? (
+                    <button type="button" className="primary" style={{ gridColumn: '1 / -1' }} onClick={() => startRecorder('new')}><RefreshCw size={14} /> Yeni Rota Kaydı</button>
                   ) : (
                     <button type="button" className="primary" style={{ gridColumn: '1 / -1' }} onClick={() => startRecorder('new')}><Play size={14} /> Canlı Kaydı Başlat</button>
                   )}
-                  <button type="button" className="blue" onClick={exportKml} disabled={tracking || rawTrack.length < 2 || !exportName.trim()}><FileDown size={14} /> KML Dışa Aktar</button>
-                  <button type="button" className="blue" onClick={() => void exportKmz()} disabled={tracking || rawTrack.length < 2 || !exportName.trim()}><FileArchive size={14} /> KMZ Dışa Aktar</button>
-                  <button type="button" onClick={clearTrack} disabled={!rawTrack.length || tracking}><Trash2 size={14} /> Kaydı Temizle</button>
+                  <button type="button" className="blue" onClick={exportKml} disabled={meta.status !== 'finished' || rawTrack.length < 2 || !exportName.trim()}><FileDown size={14} /> KML Dışa Aktar</button>
+                  <button type="button" className="blue" onClick={() => void exportKmz()} disabled={meta.status !== 'finished' || rawTrack.length < 2 || !exportName.trim()}><FileArchive size={14} /> KMZ Dışa Aktar</button>
+                  <button type="button" onClick={clearTrack} disabled={!rawTrack.length || tracking || meta.status === 'paused'}><Trash2 size={14} /> Kaydı Temizle</button>
                 </div>
                 <label className="live-toggle-row"><span><strong>Hareketsizken konumları atla</strong><small>GPS salınımını ve gereksiz noktaları azaltır</small></span><input type="checkbox" checked={settings.skipStationary} onChange={(event) => setLiveSettings({ skipStationary: event.target.checked })} /></label>
-                <p className="live-inline-note"><Pause size={12} /> Kaydedilen {rawTrack.length} ham GPS noktası ve segment ayrımları KML/KMZ içinde açık rota çizgisi olarak korunur. İlk ve son nokta birleştirilmez.</p>
+                <p className="live-inline-note"><Pause size={12} /> Rota haritada canlı çizilir. Duraklatıp devam edildiğinde yeni segment açılır; GPS sıçramaları temizlenir ve ilk-son nokta birleştirilmez.</p>
               </Card>
 
-              <Card title="GNSS Sinyal Uyarısı" subtitle="Sinyal kaybolduğunda veya hassasiyet düştüğünde uyarır" icon={numberBadge(3)} tone="amber">
+              <Card title="Rota Arşivi" subtitle="Bitirilen rotaları yeniden aç, paylaş veya sil" icon={numberBadge(3)} tone="green">
+                {routeArchive.length ? (
+                  <div className="live-archive-list">
+                    {routeArchive.map((item) => (
+                      <div className="live-archive-item" key={item.id}>
+                        <div className="live-archive-head">
+                          <span><strong>{item.name}</strong><small>{new Date(item.finishedAt).toLocaleString('tr-TR')} · {formatDistance(item.distanceM)} · {item.points.length} nokta</small></span>
+                        </div>
+                        <div className="live-archive-actions">
+                          <button type="button" onClick={() => openArchivedRoute(item)} disabled={tracking}><Eye size={12} /> Göster</button>
+                          <button type="button" onClick={() => downloadRouteKml(item.name, item.points, item.segmentBreaks)}><FileDown size={12} /> KML</button>
+                          <button type="button" onClick={() => void downloadRouteKmz(item.name, item.points, item.segmentBreaks)}><FileArchive size={12} /> KMZ</button>
+                          <button type="button" className="danger" onClick={() => deleteArchivedRoute(item)} disabled={tracking}><Trash2 size={12} /> Sil</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : <p className="live-inline-note"><History size={12} /> Bitirdiğin rotalar burada cihaz içinde saklanacak.</p>}
+              </Card>
+
+              <Card title="GNSS Sinyal Uyarısı" subtitle="Sinyal kaybolduğunda veya hassasiyet düştüğünde uyarır" icon={numberBadge(4)} tone="amber">
                 <label className="live-toggle-row"><span><strong>Kayıp / zayıf sinyal uyarısı</strong><small>APK’deki “Lost signal warning” davranışı</small></span><input type="checkbox" checked={settings.signalWarnings} onChange={(event) => setLiveSettings({ signalWarnings: event.target.checked })} /></label>
                 <Field label="Zayıf sinyal sınırı"><select value={settings.signalAccuracyLimit} onChange={(event) => setLiveSettings({ signalAccuracyLimit: Number(event.target.value) })}><option value="30">±30 m</option><option value="50">±50 m</option><option value="60">±60 m</option><option value="100">±100 m</option></select></Field>
                 <p className="live-inline-note"><BellRing size={12} /> Kayıp sinyal 15 saniye fix alınamadığında; zayıf sinyal seçilen hassasiyet sınırı aşıldığında değerlendirilir.</p>
               </Card>
 
-              <Card title="Rota Takibi" subtitle="Canlı ilerleme, ters sıra, döngü ve rotadan sapma uyarısı" icon={numberBadge(4)} tone="purple">
+              <Card title="Rota Takibi" subtitle="Canlı ilerleme, ters sıra, döngü ve rotadan sapma uyarısı" icon={numberBadge(5)} tone="purple">
                 <Field label="Takip edilecek poligon / rota"><select value={settings.routeId} onChange={(event) => { setLiveSettings({ routeId: event.target.value }); setFollowRoute(false) }}><option value="">Rota seçin</option>{polygons.filter((layer) => layer.points.length >= 2).map((layer) => <option key={layer.id} value={layer.id}>{layer.name} · {layer.points.length} nokta</option>)}</select></Field>
                 <div className="form-grid two">
                   <Field label="Rotadan sapma"><select value={settings.routeWarningDistance} onChange={(event) => setLiveSettings({ routeWarningDistance: Number(event.target.value) })}><option value="20">20 m</option><option value="50">50 m</option><option value="100">100 m</option><option value="200">200 m</option></select></Field>
@@ -750,7 +884,7 @@ export default function LiveLocationPanel({
                 )}
               </Card>
 
-              <Card title="Yakınlık Alarmı" subtitle="Hedefe yaklaşınca saha uyarısı verir" icon={numberBadge(5)} tone="amber">
+              <Card title="Yakınlık Alarmı" subtitle="Hedefe yaklaşınca saha uyarısı verir" icon={numberBadge(6)} tone="amber">
                 <label className="live-toggle-row"><span><strong>Yakınlık alarmı</strong><small>Seçili hedef / rota hedefi için</small></span><input type="checkbox" checked={settings.proximityEnabled} onChange={(event) => setLiveSettings({ proximityEnabled: event.target.checked })} /></label>
                 <div className="form-grid two">
                   <Field label="Alarm mesafesi"><select value={settings.proximityRadius} onChange={(event) => setLiveSettings({ proximityRadius: Number(event.target.value) })}><option value="20">20 m</option><option value="50">50 m</option><option value="100">100 m</option><option value="200">200 m</option><option value="500">500 m</option></select></Field>
@@ -758,7 +892,7 @@ export default function LiveLocationPanel({
                 </div>
               </Card>
 
-              <Card title="Hedefe Navigasyon" subtitle="Mesafe, yön ve tahmini varış süresi" icon={numberBadge(6)} tone="green">
+              <Card title="Hedefe Navigasyon" subtitle="Mesafe, yön ve tahmini varış süresi" icon={numberBadge(7)} tone="green">
                 <Field label="Hedef nokta"><select value={settings.manualTargetId} onChange={(event) => setLiveSettings({ manualTargetId: event.target.value })}><option value="">Hedef seçin</option>{pointOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></Field>
                 <div className="live-action-grid">
                   <button type="button" onClick={ensureFix}><LocateFixed size={14} /> Konumumu Güncelle</button>
@@ -777,7 +911,7 @@ export default function LiveLocationPanel({
                 )}
               </Card>
 
-              <Card title="Pusula" subtitle="Manyetik sensör veya GNSS yönü" icon={numberBadge(7)} tone="purple">
+              <Card title="Pusula" subtitle="Manyetik sensör veya GNSS yönü" icon={numberBadge(8)} tone="purple">
                 <div className="live-compass">
                   <div className="live-compass-dial"><span className="live-compass-needle" style={{ transform: `rotate(${effectiveHeading ?? 0}deg)` }} /></div>
                   <div className="live-compass-copy"><strong>{effectiveHeading === null ? '—' : `${Math.round(effectiveHeading)}° ${compassLabel(effectiveHeading)}`}</strong><small>APK kaynağındaki pusula kalibrasyon mantığına uygun olarak sensör saparsa telefonu tüm yönlerde / 8 şekli çizerek hareket ettirin.</small><button type="button" className="live-wide-button" onClick={requestCompass}><Compass size={14} /> {compassActive ? 'Pusula Aktif' : 'Pusulayı Etkinleştir'}</button></div>
@@ -785,7 +919,7 @@ export default function LiveLocationPanel({
                 <Field label="Yön kaynağı"><select value={settings.headingSource} onChange={(event) => setLiveSettings({ headingSource: event.target.value as LiveSettings['headingSource'] })}><option value="auto">Otomatik · hareket varsa GNSS</option><option value="gnss">GNSS rota yönü</option><option value="compass">Manyetik pusula</option></select></Field>
               </Card>
 
-              <Card title="Haritayı Yöne Döndür" subtitle="GNSS / pusula yönüne göre saha görünümünü hizalar" icon={numberBadge(8)} tone="green">
+              <Card title="Haritayı Yöne Döndür" subtitle="GNSS / pusula yönüne göre saha görünümünü hizalar" icon={numberBadge(9)} tone="green">
                 <label className="live-toggle-row"><span><strong>Yön kilidi</strong><small>Haritayı mevcut yön yukarı gelecek şekilde döndürür</small></span><input type="checkbox" checked={settings.rotateMap} onChange={(event) => setLiveSettings({ rotateMap: event.target.checked })} /></label>
                 <div className="live-status-row">
                   <div className="live-status-cell"><small>Yön</small><strong>{effectiveHeading === null ? '—' : `${Math.round(effectiveHeading)}°`}</strong></div>

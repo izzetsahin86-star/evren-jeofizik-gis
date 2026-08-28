@@ -22,6 +22,7 @@ const tileLayers: Record<BaseLayerId, { url: string; attribution: string }> = {
 }
 
 const TRACK_STORAGE_KEY = 'evren-jeofizik-gis-live-track-v1'
+const LIVE_META_KEY = 'evren-jeofizik-gis-live-meta-v2'
 const MAX_TRACK_POINTS = 5000
 
 type MapPosition = { lat: number; lng: number }
@@ -55,6 +56,33 @@ function readStoredTrack(): TrackPoint[] {
   } catch {
     return []
   }
+}
+
+function readStoredSegmentBreaks() {
+  try {
+    const value = JSON.parse(localStorage.getItem(LIVE_META_KEY) || '{}') as { segmentBreaks?: unknown }
+    if (!Array.isArray(value.segmentBreaks)) return [0]
+    const starts = value.segmentBreaks.filter((index): index is number => Number.isInteger(index) && Number(index) >= 0)
+    return starts.length ? Array.from(new Set([0, ...starts])).sort((a, b) => a - b) : [0]
+  } catch {
+    return [0]
+  }
+}
+
+function splitTrack(points: TrackPoint[], segmentBreaks: number[]) {
+  const starts = Array.from(new Set([0, ...segmentBreaks]))
+    .filter((index) => Number.isInteger(index) && index >= 0 && index < points.length)
+    .sort((a, b) => a - b)
+  return starts.map((start, index) => points.slice(start, starts[index + 1] ?? points.length)).filter((segment) => segment.length)
+}
+
+function isGpsJump(previous: TrackPoint | undefined, point: GpsPosition) {
+  if (!previous) return false
+  if (point.accuracy > 150 || (point.speed !== null && point.speed > 80)) return true
+  const elapsedSeconds = Math.max(0.25, (point.timestamp - previous.timestamp) / 1000)
+  const movedM = pointDistance(previous, { ...point, id: 'gps-candidate' }) ?? 0
+  const accuracyAllowance = Math.min(120, previous.accuracy + point.accuracy)
+  return movedM > Math.max(120, elapsedSeconds * 75 + accuracyAllowance)
 }
 
 function gpsFromPosition(position: GeolocationPosition): GpsPosition {
@@ -711,6 +739,9 @@ export default function MapWorkspace({
   const [gpsPosition, setGpsPosition] = useState<GpsPosition | null>(null)
   const [tracking, setTracking] = useState(false)
   const [trackPoints, setTrackPoints] = useState<TrackPoint[]>(readStoredTrack)
+  const trackPointsRef = useRef(trackPoints)
+  const [trackSegmentBreaks, setTrackSegmentBreaks] = useState<number[]>(readStoredSegmentBreaks)
+  const [rejectedTrackPoints, setRejectedTrackPoints] = useState(0)
   const active = polygons.find((layer) => layer.id === activeId) ?? polygons[0]
   const analysis = useMemo(() => analyzePolygon(active?.points ?? []), [active])
   const measurement = useMemo(() => {
@@ -719,7 +750,10 @@ export default function MapWorkspace({
     const areaM2 = measurePoints.length >= 3 ? analyzePolygon(measurePoints).areaM2 : 0
     return { distanceM, bearing, areaM2 }
   }, [measurePoints])
-  const trackDistanceM = useMemo(() => trackPoints.slice(1).reduce((sum, point, index) => sum + (pointDistance(trackPoints[index], point) ?? 0), 0), [trackPoints])
+  const trackSegments = useMemo(() => splitTrack(trackPoints, trackSegmentBreaks), [trackPoints, trackSegmentBreaks])
+  const trackDistanceM = useMemo(() => trackSegments.reduce((total, segment) => (
+    total + segment.slice(1).reduce((sum, point, index) => sum + (pointDistance(segment[index], point) ?? 0), 0)
+  ), 0), [trackSegments])
 
   useEffect(() => {
     const timer = window.setTimeout(() => mapRef.current?.invalidateSize(), 240)
@@ -732,6 +766,7 @@ export default function MapWorkspace({
   }, [flyTarget])
 
   useEffect(() => {
+    trackPointsRef.current = trackPoints
     try {
       localStorage.setItem(TRACK_STORAGE_KEY, JSON.stringify(trackPoints.slice(-MAX_TRACK_POINTS)))
     } catch {
@@ -756,6 +791,9 @@ export default function MapWorkspace({
     setMeasurePoints([])
     setGpsPosition(null)
     setTrackPoints([])
+    trackPointsRef.current = []
+    setTrackSegmentBreaks([0])
+    setRejectedTrackPoints(0)
     localStorage.removeItem(TRACK_STORAGE_KEY)
   }, [clearRequest])
 
@@ -788,16 +826,21 @@ export default function MapWorkspace({
   }
 
   const recordTrackPoint = (point: GpsPosition) => {
+    const previous = trackPointsRef.current.at(-1)
+    if (isGpsJump(previous, point)) {
+      setRejectedTrackPoints((count) => count + 1)
+      return
+    }
     const next: TrackPoint = { ...point, id: `track-${point.timestamp}-${Math.random().toString(36).slice(2, 7)}` }
-    setTrackPoints((current) => {
-      const previous = current[current.length - 1]
-      if (previous) {
-        const movedM = pointDistance(previous, next) ?? 0
-        const elapsedMs = Math.max(0, next.timestamp - previous.timestamp)
-        if (movedM < 1 && elapsedMs < 10000) return current
-      }
-      return [...current, next].slice(-MAX_TRACK_POINTS)
-    })
+    const current = trackPointsRef.current
+    if (previous) {
+      const movedM = pointDistance(previous, next) ?? 0
+      const elapsedMs = Math.max(0, next.timestamp - previous.timestamp)
+      if (movedM < 1 && elapsedMs < 10000) return
+    }
+    const updated = [...current, next].slice(-MAX_TRACK_POINTS)
+    trackPointsRef.current = updated
+    setTrackPoints(updated)
   }
 
   const stopTracking = (announce = true) => {
@@ -850,16 +893,36 @@ export default function MapWorkspace({
 
   const clearTrack = () => {
     setTrackPoints([])
+    trackPointsRef.current = []
+    setTrackSegmentBreaks([0])
+    setRejectedTrackPoints(0)
     localStorage.removeItem(TRACK_STORAGE_KEY)
     onMessage('Kayıtlı canlı konum izi temizlendi.', 'success')
   }
 
   const liveTrackCommandRef = useRef<(command: LiveTrackCommand) => void>(() => undefined)
   liveTrackCommandRef.current = (command) => {
-    if (command === 'start') startTracking()
+    if (typeof command === 'object' && command.type === 'segments') {
+      setTrackSegmentBreaks(command.segmentBreaks)
+    } else if (typeof command === 'object' && command.type === 'load') {
+      const points = command.points.map((point, index) => ({
+        id: point.id ?? `track-loaded-${index}`,
+        lat: point.lat,
+        lng: point.lng,
+        accuracy: point.accuracy ?? 1,
+        altitude: point.altitude ?? null,
+        speed: point.speed ?? null,
+        heading: point.heading ?? null,
+        timestamp: point.timestamp ?? Date.now(),
+      }))
+      trackPointsRef.current = points
+      setTrackPoints(points)
+      setTrackSegmentBreaks(command.segmentBreaks)
+      setRejectedTrackPoints(command.rejectedCount ?? 0)
+    } else if (command === 'start') startTracking()
     else if (command === 'stop') stopTracking()
     else if (command === 'clear') clearTrack()
-    else sendLiveTrackStatus({ tracking, points: trackPoints })
+    else sendLiveTrackStatus({ tracking, points: trackPoints, segmentBreaks: trackSegmentBreaks, rejectedCount: rejectedTrackPoints })
   }
 
   useEffect(() => {
@@ -871,8 +934,8 @@ export default function MapWorkspace({
   }, [])
 
   useEffect(() => {
-    sendLiveTrackStatus({ tracking, points: trackPoints })
-  }, [tracking, trackPoints])
+    sendLiveTrackStatus({ tracking, points: trackPoints, segmentBreaks: trackSegmentBreaks, rejectedCount: rejectedTrackPoints })
+  }, [tracking, trackPoints, trackSegmentBreaks, rejectedTrackPoints])
 
   const locate = () => {
     if (gpsPosition && !tracking) {
@@ -951,15 +1014,25 @@ export default function MapWorkspace({
         {measurePoints.length >= 3 && <Polygon positions={measurePoints.map((point) => [point.lat, point.lng])} pathOptions={{ color: '#ef4444', weight: 2, fillColor: '#ef4444', fillOpacity: 0.08, dashArray: '8 7' }} />}
         {measurePoints.map((point, index) => <CircleMarker key={point.id} center={[point.lat, point.lng]} radius={5} pathOptions={{ color: 'white', weight: 2, fillColor: '#ef4444', fillOpacity: 1 }}><Tooltip direction="top">Ölçüm {index + 1}</Tooltip></CircleMarker>)}
 
-        {trackPoints.length >= 2 && (
+        {trackSegments.map((segment, index) => segment.length >= 2 ? (
           <Polyline
-            positions={trackPoints.map((point) => [point.lat, point.lng])}
+            key={`track-segment-${index}-${segment[0].id}`}
+            positions={segment.map((point) => [point.lat, point.lng])}
             pathOptions={{ color: '#f59e0b', weight: 4, opacity: 0.9 }}
           >
-            <Tooltip sticky>Canlı takip izi · {trackPoints.length} kayıt · {formatTrackDistance(trackDistanceM)}</Tooltip>
+            <Tooltip sticky>Rota segmenti {index + 1} · {segment.length} nokta</Tooltip>
           </Polyline>
+        ) : null)}
+        {trackPoints.length >= 1 && (
+          <CircleMarker center={[trackPoints[0].lat, trackPoints[0].lng]} radius={7} pathOptions={{ color: 'white', weight: 3, fillColor: '#22c55e', fillOpacity: 1 }}>
+            <Tooltip direction="top">Rota başlangıcı</Tooltip>
+          </CircleMarker>
         )}
-        {trackPoints.length === 1 && <CircleMarker center={[trackPoints[0].lat, trackPoints[0].lng]} radius={4} pathOptions={{ color: '#f59e0b', weight: 2, fillColor: '#f59e0b', fillOpacity: 1 }} />}
+        {trackPoints.length >= 2 && (
+          <CircleMarker center={[trackPoints.at(-1)!.lat, trackPoints.at(-1)!.lng]} radius={7} pathOptions={{ color: 'white', weight: 3, fillColor: tracking ? '#f59e0b' : '#ef4444', fillOpacity: 1 }}>
+            <Tooltip direction="top">{tracking ? 'Canlı rota ucu' : 'Rota bitişi'} · {trackPoints.length} nokta · {formatTrackDistance(trackDistanceM)}</Tooltip>
+          </CircleMarker>
+        )}
 
         {gpsPosition && (
           <Fragment>

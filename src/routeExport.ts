@@ -65,6 +65,17 @@ export function routeToKml(name: string, points: RouteExportPoint[], segmentBrea
     </Placemark>`
   }).join('\n')
 
+  const endpointPlacemarks = points.length >= 2 ? `    <Placemark>
+      <name>${escapeKml(safeName)} · Başlangıç</name>
+      <styleUrl>#start-style</styleUrl>
+      <Point><coordinates>${points[0].lng.toFixed(8)},${points[0].lat.toFixed(8)},0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>${escapeKml(safeName)} · Bitiş</name>
+      <styleUrl>#finish-style</styleUrl>
+      <Point><coordinates>${points.at(-1)!.lng.toFixed(8)},${points.at(-1)!.lat.toFixed(8)},0</coordinates></Point>
+    </Placemark>` : ''
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
@@ -72,7 +83,14 @@ export function routeToKml(name: string, points: RouteExportPoint[], segmentBrea
     <Style id="route-style">
       <LineStyle><color>ff00a5ff</color><width>4</width></LineStyle>
     </Style>
+    <Style id="start-style">
+      <IconStyle><color>ff5ec522</color><scale>1.1</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle>
+    </Style>
+    <Style id="finish-style">
+      <IconStyle><color>ff4444ef</color><scale>1.1</scale><Icon><href>https://maps.google.com/mapfiles/kml/paddle/red-circle.png</href></Icon></IconStyle>
+    </Style>
 ${placemarks}
+${endpointPlacemarks}
   </Document>
 </kml>`
 }

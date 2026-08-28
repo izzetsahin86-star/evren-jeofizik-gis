@@ -1,8 +1,6 @@
 export const LIVE_TRACK_COMMAND_EVENT = 'evren-live-track-command'
 export const LIVE_TRACK_STATUS_EVENT = 'evren-live-track-status'
 
-export type LiveTrackCommand = 'start' | 'stop' | 'clear' | 'status'
-
 export type LiveTrackPoint = {
   id?: string
   lat: number
@@ -14,9 +12,19 @@ export type LiveTrackPoint = {
   timestamp?: number
 }
 
+export type LiveTrackCommand =
+  | 'start'
+  | 'stop'
+  | 'clear'
+  | 'status'
+  | { type: 'segments'; segmentBreaks: number[] }
+  | { type: 'load'; points: LiveTrackPoint[]; segmentBreaks: number[]; rejectedCount?: number }
+
 export type LiveTrackStatus = {
   tracking: boolean
   points: LiveTrackPoint[]
+  segmentBreaks: number[]
+  rejectedCount: number
 }
 
 export function sendLiveTrackCommand(command: LiveTrackCommand) {

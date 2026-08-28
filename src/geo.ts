@@ -47,6 +47,25 @@ export function utmZoneForLng(lng: number) {
   return Math.max(1, Math.min(60, Math.floor((lng + 180) / 6) + 1))
 }
 
+export function dominantUtmZone(points: Array<Pick<GeoPoint, 'lng'>>, fallback = 36) {
+  const counts = new Map<number, number>()
+  let dominantZone = fallback
+  let dominantCount = 0
+
+  points.forEach((point) => {
+    if (!Number.isFinite(point.lng)) return
+    const zone = utmZoneForLng(point.lng)
+    const count = (counts.get(zone) ?? 0) + 1
+    counts.set(zone, count)
+    if (count > dominantCount) {
+      dominantZone = zone
+      dominantCount = count
+    }
+  })
+
+  return dominantZone
+}
+
 export function utmLatitudeBand(lat: number) {
   const bands = 'CDEFGHJKLMNPQRSTUVWX'
   const boundedLatitude = Math.max(-80, Math.min(84, lat))

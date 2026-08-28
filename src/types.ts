@@ -24,6 +24,7 @@ export interface PolygonLayer {
   id: string
   name: string
   color: string
+  utmZone?: number
   strokeWidth?: number
   strokeOpacity?: number
   fillOpacity?: number

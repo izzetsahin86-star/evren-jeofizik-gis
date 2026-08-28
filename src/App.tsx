@@ -6,7 +6,7 @@ import MapWorkspace from './components/MapWorkspace'
 import SmartDock from './components/SmartDock'
 import SmartHeader from './components/SmartHeader'
 import type { DockPanelId } from './dock'
-import { DEFAULT_POLYGON_APPEARANCE, POLYGON_COLORS, analyzePolygon, formatAreaShort, uid } from './geo'
+import { DEFAULT_POLYGON_APPEARANCE, POLYGON_COLORS, analyzePolygon, dominantUtmZone, formatAreaShort, uid } from './geo'
 import type { BaseLayerId, DisplaySettings, GeoPoint, PerformanceMode, PolygonAppearance, PolygonLayer } from './types'
 
 const WORKSPACE_KEY = 'evren-jeofizik-gis-workspace-v1'
@@ -35,6 +35,7 @@ function createPolygon(index = 0): PolygonLayer {
     id: uid('polygon'),
     name: `Poligon ${index + 1}`,
     color: POLYGON_COLORS[index % POLYGON_COLORS.length],
+    utmZone: 36,
     ...DEFAULT_POLYGON_APPEARANCE,
     points: [],
     desPoints: [],
@@ -42,14 +43,17 @@ function createPolygon(index = 0): PolygonLayer {
 }
 
 function normalizePolygon(layer: Partial<PolygonLayer>, index: number): PolygonLayer {
+  const points = Array.isArray(layer.points) ? layer.points : []
+  const savedZone = Number(layer.utmZone)
   return {
     id: layer.id || uid('polygon'),
     name: layer.name || `Poligon ${index + 1}`,
     color: layer.color || POLYGON_COLORS[index % POLYGON_COLORS.length],
+    utmZone: Number.isInteger(savedZone) && savedZone >= 1 && savedZone <= 60 ? savedZone : dominantUtmZone(points),
     strokeWidth: layer.strokeWidth ?? DEFAULT_POLYGON_APPEARANCE.strokeWidth,
     strokeOpacity: layer.strokeOpacity ?? DEFAULT_POLYGON_APPEARANCE.strokeOpacity,
     fillOpacity: layer.fillOpacity ?? DEFAULT_POLYGON_APPEARANCE.fillOpacity,
-    points: Array.isArray(layer.points) ? layer.points : [],
+    points,
     desPoints: Array.isArray(layer.desPoints) ? layer.desPoints : [],
   }
 }
@@ -357,6 +361,7 @@ export default function App() {
           onRenamePolygon={(id, name) => updatePolygons((current) => current.map((layer) => layer.id === id ? { ...layer, name } : layer))}
           onCycleColor={(id) => updatePolygons((current) => current.map((layer) => layer.id === id ? { ...layer, color: POLYGON_COLORS[(POLYGON_COLORS.indexOf(layer.color) + 1) % POLYGON_COLORS.length] } : layer))}
           onSetPolygonStyle={(id, appearance: Partial<PolygonAppearance>) => setPolygonsState((current) => current.map((layer) => layer.id === id ? { ...layer, ...appearance } : layer))}
+          onSetCoordinateZone={(id, utmZone) => setPolygonsState((current) => current.map((layer) => layer.id === id ? { ...layer, utmZone } : layer))}
           onSetPerformanceMode={setPerformanceMode}
           onSetDisplaySettings={setDisplaySettings}
           onClearAllData={clearAllData}

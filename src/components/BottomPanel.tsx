@@ -32,6 +32,7 @@ import { validateCoordinates } from '../coordinateValidation'
 import {
   analyzePolygon,
   deltaEastNorth,
+  dominantUtmZone,
   downloadBlob,
   downloadKmz,
   formatAreaShort,
@@ -128,6 +129,7 @@ interface BottomPanelProps {
   onRenamePolygon: (id: string, name: string) => void
   onCycleColor: (id: string) => void
   onSetPolygonStyle: (id: string, appearance: Partial<PolygonAppearance>) => void
+  onSetCoordinateZone: (id: string, zone: number) => void
   onSetPerformanceMode: (mode: PerformanceMode) => void
   onSetDisplaySettings: (settings: DisplaySettings) => void
   onClearAllData: () => void
@@ -221,11 +223,12 @@ function LayerPanel(props: BottomPanelProps) {
 
 function CoordinatePanel(props: BottomPanelProps) {
   const active = props.polygons.find((layer) => layer.id === props.activeId) ?? props.polygons[0]
+  const zone = active.utmZone ?? dominantUtmZone(active.points)
+  const setZone = (nextZone: number) => props.onSetCoordinateZone(active.id, nextZone)
   const [format, setFormat] = useState<CoordinateFormat>('utm')
   const [listFormat, setListFormat] = useState<CoordinateFormat>('latlon')
   const [bulkFormat, setBulkFormat] = useState<CoordinateFormat>('utm')
   const [datum, setDatum] = useState('WGS84')
-  const [zone, setZone] = useState(36)
   const [hemisphere, setHemisphere] = useState<'N' | 'S'>('N')
   const [coordinate, setCoordinate] = useState('')
   const [easting, setEasting] = useState('')

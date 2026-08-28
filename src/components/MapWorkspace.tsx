@@ -143,6 +143,10 @@ function formatHectares(areaM2: number) {
   return `${formatNumber(areaM2 / 10_000, 2)} ha`
 }
 
+function polygonPointName(index: number) {
+  return `Nokta ${index + 1}`
+}
+
 function downloadKml(file: File) {
   const url = URL.createObjectURL(file)
   const anchor = document.createElement('a')
@@ -197,8 +201,8 @@ function pointPlacemark(name: string, point: GeoPoint) {
     </Placemark>`
 }
 
-function pointKml(layer: PolygonLayer, point: GeoPoint, index: number) {
-  const name = `${layer.name} · Nokta ${index + 1}`
+function pointKml(point: GeoPoint, index: number) {
+  const name = polygonPointName(index)
   return namedPointKml(name, point)
 }
 
@@ -241,7 +245,7 @@ function polygonKml(layer: PolygonLayer) {
     </Placemark>
     <Folder>
       <name>Poligon Noktaları</name>
-      ${layer.points.map((point, index) => pointPlacemark(`${layer.name} · Nokta ${index + 1}`, point)).join('\n      ')}
+      ${layer.points.map((point, index) => pointPlacemark(polygonPointName(index), point)).join('\n      ')}
     </Folder>
   </Document>
 </kml>`
@@ -314,6 +318,29 @@ function KmlShareCard({ kind, title, titleLabel, detail, buttonLabel, kml, creat
           <Share2 size={16} /> {buttonLabel}
         </button>
         {onDelete ? <button type="button" className="map-share-delete" onClick={onDelete}><Trash2 size={15} /> Noktayı Sil</button> : null}
+      </div>
+    </div>
+  )
+}
+
+interface MapDeleteConfirmCardProps {
+  kind: 'Nokta' | 'Poligon'
+  name: string
+  detail: string
+  onCancel: () => void
+  onConfirm: () => void
+}
+
+function MapDeleteConfirmCard({ kind, name, detail, onCancel, onConfirm }: MapDeleteConfirmCardProps) {
+  return (
+    <div className="map-delete-card" role="alertdialog" aria-label={`${name} silme onayı`}>
+      <span className="map-delete-icon"><Trash2 size={19} /></span>
+      <strong>{name} silinsin mi?</strong>
+      <small>{kind} haritadan kaldırılacak. Silmek için onay verin.</small>
+      <em>{detail}</em>
+      <div className="map-delete-actions">
+        <button type="button" onClick={onCancel}>Vazgeç</button>
+        <button type="button" className="confirm-delete" onClick={onConfirm}><Trash2 size={14} /> Sil</button>
       </div>
     </div>
   )
@@ -469,17 +496,26 @@ const PolygonLayerView = memo(function PolygonLayerView({
   isActive,
   performanceMode,
   onUpdatePoint,
+  onDeletePoint,
+  onDeletePolygon,
   onMessage,
 }: {
   layer: PolygonLayer
   isActive: boolean
   performanceMode: boolean
   onUpdatePoint: (pointId: string, point: Omit<GeoPoint, 'id'>) => void
+  onDeletePoint: (polygonId: string, pointId: string) => void
+  onDeletePolygon: (polygonId: string) => void
   onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
 }) {
   const [shareTarget, setShareTarget] = useState<
     | { kind: 'polygon' | 'line'; position: [number, number] }
     | { kind: 'point'; position: [number, number]; index: number }
+    | null
+  >(null)
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { kind: 'polygon'; position: [number, number] }
+    | { kind: 'point'; position: [number, number]; pointId: string }
     | null
   >(null)
   const lastShareTap = useRef<{ key: string; timestamp: number } | null>(null)
@@ -490,10 +526,18 @@ const PolygonLayerView = memo(function PolygonLayerView({
     const previous = lastShareTap.current
     if (previous?.key === key && timestamp - previous.timestamp <= 450) {
       lastShareTap.current = null
+      setDeleteTarget(null)
       setShareTarget(target)
       return
     }
     lastShareTap.current = { key, timestamp }
+  }, [])
+  const openDeleteOnLongPress = useCallback((target: NonNullable<typeof deleteTarget>, event: LeafletMouseEvent) => {
+    event.originalEvent.preventDefault()
+    event.originalEvent.stopPropagation()
+    lastShareTap.current = null
+    setShareTarget(null)
+    setDeleteTarget(target)
   }, [])
   const strokeWidth = layer.strokeWidth ?? 3
   const strokeOpacity = layer.strokeOpacity ?? 1
@@ -501,6 +545,8 @@ const PolygonLayerView = memo(function PolygonLayerView({
   const polygonAreaM2 = useMemo(() => layer.points.length >= 3 ? analyzePolygon(layer.points).areaM2 : 0, [layer.points])
   const markerIndexes = performanceMode ? (isActive ? sampledIndexes(layer.points.length, 180) : []) : sampledIndexes(layer.points.length, layer.points.length)
   const desIndexes = performanceMode ? sampledIndexes(layer.desPoints.length, 1200) : sampledIndexes(layer.desPoints.length, layer.desPoints.length)
+  const deletePoint = deleteTarget?.kind === 'point' ? layer.points.find((point) => point.id === deleteTarget.pointId) : undefined
+  const deletePointIndex = deletePoint ? layer.points.indexOf(deletePoint) : -1
 
   return (
     <Fragment>
@@ -519,6 +565,9 @@ const PolygonLayerView = memo(function PolygonLayerView({
             click(event) {
               openShareOnSecondTap('polygon', { kind: 'polygon', position: [event.latlng.lat, event.latlng.lng] }, event)
             },
+            contextmenu(event) {
+              openDeleteOnLongPress({ kind: 'polygon', position: [event.latlng.lat, event.latlng.lng] }, event)
+            },
           }}
         />
       ) : layer.points.length >= 2 ? (
@@ -529,6 +578,9 @@ const PolygonLayerView = memo(function PolygonLayerView({
           eventHandlers={{
             click(event) {
               openShareOnSecondTap('line', { kind: 'line', position: [event.latlng.lat, event.latlng.lng] }, event)
+            },
+            contextmenu(event) {
+              openDeleteOnLongPress({ kind: 'polygon', position: [event.latlng.lat, event.latlng.lng] }, event)
             },
           }}
         />
@@ -541,7 +593,7 @@ const PolygonLayerView = memo(function PolygonLayerView({
             key={point.id}
             position={[point.lat, point.lng]}
             icon={numberIcon(index + 1, layer.color, isActive)}
-            title={`${layer.name} · Nokta ${index + 1}`}
+            title={polygonPointName(index)}
             draggable={isActive && !performanceMode}
             bubblingMouseEvents={false}
             eventHandlers={{
@@ -552,9 +604,12 @@ const PolygonLayerView = memo(function PolygonLayerView({
               click(event) {
                 openShareOnSecondTap(`point-${point.id}`, { kind: 'point', position: [point.lat, point.lng], index }, event)
               },
+              contextmenu(event) {
+                openDeleteOnLongPress({ kind: 'point', position: [point.lat, point.lng], pointId: point.id }, event)
+              },
             }}
           >
-            <Tooltip direction="top">{layer.name} · Nokta {index + 1}<br />{point.lat.toFixed(6)}, {point.lng.toFixed(6)}</Tooltip>
+            <Tooltip direction="top">{polygonPointName(index)}<br />{point.lat.toFixed(6)}, {point.lng.toFixed(6)}</Tooltip>
           </Marker>
         )
       })}
@@ -569,10 +624,10 @@ const PolygonLayerView = memo(function PolygonLayerView({
             layer.points[shareTarget.index] ? (
               <KmlShareCard
                 kind="Koordinat noktası"
-                title={`${layer.name} · Nokta ${shareTarget.index + 1}`}
+                title={polygonPointName(shareTarget.index)}
                 detail={`${layer.points[shareTarget.index].lat.toFixed(7)}, ${layer.points[shareTarget.index].lng.toFixed(7)}`}
                 buttonLabel="Noktayı KML Olarak Paylaş"
-                kml={pointKml(layer, layer.points[shareTarget.index], shareTarget.index)}
+                kml={pointKml(layer.points[shareTarget.index], shareTarget.index)}
                 onMessage={onMessage}
               />
             ) : null
@@ -584,6 +639,43 @@ const PolygonLayerView = memo(function PolygonLayerView({
               buttonLabel={shareTarget.kind === 'polygon' ? 'Poligonu KML Olarak Paylaş' : 'Hattı KML Olarak Paylaş'}
               kml={polygonKml(layer)}
               onMessage={onMessage}
+            />
+          )}
+        </Popup>
+      )}
+
+      {deleteTarget && (
+        <Popup
+          position={deleteTarget.position}
+          className="map-delete-popup"
+          closeButton={false}
+          eventHandlers={{ remove: () => setDeleteTarget(null) }}
+        >
+          {deleteTarget.kind === 'point' ? (
+            deletePoint && deletePointIndex >= 0 ? (
+              <MapDeleteConfirmCard
+                kind="Nokta"
+                name={polygonPointName(deletePointIndex)}
+                detail={`${deletePoint.lat.toFixed(7)}, ${deletePoint.lng.toFixed(7)}`}
+                onCancel={() => setDeleteTarget(null)}
+                onConfirm={() => {
+                  setDeleteTarget(null)
+                  onDeletePoint(layer.id, deletePoint.id)
+                  onMessage(`${polygonPointName(deletePointIndex)} silindi.`, 'success')
+                }}
+              />
+            ) : null
+          ) : (
+            <MapDeleteConfirmCard
+              kind="Poligon"
+              name={layer.name}
+              detail={`${layer.points.length} nokta${polygonAreaM2 ? ` · ${formatHectares(polygonAreaM2)}` : ''}`}
+              onCancel={() => setDeleteTarget(null)}
+              onConfirm={() => {
+                setDeleteTarget(null)
+                onDeletePolygon(layer.id)
+                onMessage(`${layer.name} silindi.`, 'success')
+              }}
             />
           )}
         </Popup>
@@ -615,9 +707,12 @@ const StandalonePointLayer = memo(function StandalonePointLayer({
   onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
 }) {
   const [sharePointId, setSharePointId] = useState<string | null>(null)
+  const [deletePointId, setDeletePointId] = useState<string | null>(null)
   const lastTap = useRef<{ pointId: string; timestamp: number } | null>(null)
   const selectedPoint = points.find((point) => point.id === sharePointId)
   const selectedIndex = selectedPoint ? points.indexOf(selectedPoint) : -1
+  const deletePoint = points.find((point) => point.id === deletePointId)
+  const deleteIndex = deletePoint ? points.indexOf(deletePoint) : -1
 
   return (
     <Fragment>
@@ -637,10 +732,18 @@ const StandalonePointLayer = memo(function StandalonePointLayer({
                 const timestamp = Date.now()
                 if (lastTap.current?.pointId === point.id && timestamp - lastTap.current.timestamp <= 450) {
                   lastTap.current = null
+                  setDeletePointId(null)
                   setSharePointId(point.id)
                   return
                 }
                 lastTap.current = { pointId: point.id, timestamp }
+              },
+              contextmenu(event) {
+                event.originalEvent.preventDefault()
+                event.originalEvent.stopPropagation()
+                lastTap.current = null
+                setSharePointId(null)
+                setDeletePointId(point.id)
               },
             }}
           >
@@ -666,10 +769,31 @@ const StandalonePointLayer = memo(function StandalonePointLayer({
             onTitleCommit={(name) => onRenamePoint(selectedPoint.id, name)}
             onDelete={() => {
               setSharePointId(null)
-              onDeletePoint(selectedPoint.id)
-              onMessage('Nokta silindi.', 'success')
+              setDeletePointId(selectedPoint.id)
             }}
             onMessage={onMessage}
+          />
+        </Popup>
+      ) : null}
+
+      {deletePoint && deleteIndex >= 0 ? (
+        <Popup
+          position={[deletePoint.lat, deletePoint.lng]}
+          className="map-delete-popup"
+          closeButton={false}
+          eventHandlers={{ remove: () => setDeletePointId(null) }}
+        >
+          <MapDeleteConfirmCard
+            kind="Nokta"
+            name={deletePoint.name?.trim() || `Nokta ${deleteIndex + 1}`}
+            detail={`${deletePoint.lat.toFixed(7)}, ${deletePoint.lng.toFixed(7)}`}
+            onCancel={() => setDeletePointId(null)}
+            onConfirm={() => {
+              const name = deletePoint.name?.trim() || `Nokta ${deleteIndex + 1}`
+              setDeletePointId(null)
+              onDeletePoint(deletePoint.id)
+              onMessage(`${name} silindi.`, 'success')
+            }}
           />
         </Popup>
       ) : null}
@@ -698,6 +822,8 @@ interface MapWorkspaceProps {
   onAddStandalonePoint: (point: Omit<GeoPoint, 'id'>) => void
   onRenameStandalonePoint: (pointId: string, name: string) => void
   onDeleteStandalonePoint: (pointId: string) => void
+  onDeletePolygonPoint: (polygonId: string, pointId: string) => void
+  onDeletePolygon: (polygonId: string) => void
   onUpdatePoint: (pointId: string, point: Omit<GeoPoint, 'id'>) => void
   onLocate: (point: Omit<GeoPoint, 'id'>) => void
   onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
@@ -724,6 +850,8 @@ export default function MapWorkspace({
   onAddStandalonePoint,
   onRenameStandalonePoint,
   onDeleteStandalonePoint,
+  onDeletePolygonPoint,
+  onDeletePolygon,
   onUpdatePoint,
   onLocate,
   onMessage,
@@ -1007,7 +1135,18 @@ export default function MapWorkspace({
           onMeasurePoint={(point) => setMeasurePoints((current) => [...current, point])}
           positionListener={positionListener}
         />
-        {polygons.map((layer) => <PolygonLayerView key={layer.id} layer={layer} isActive={layer.id === activeId} performanceMode={performanceMode} onUpdatePoint={onUpdatePoint} onMessage={onMessage} />)}
+        {polygons.map((layer) => (
+          <PolygonLayerView
+            key={layer.id}
+            layer={layer}
+            isActive={layer.id === activeId}
+            performanceMode={performanceMode}
+            onUpdatePoint={onUpdatePoint}
+            onDeletePoint={onDeletePolygonPoint}
+            onDeletePolygon={onDeletePolygon}
+            onMessage={onMessage}
+          />
+        ))}
         <StandalonePointLayer points={standalonePoints} onRenamePoint={onRenameStandalonePoint} onDeletePoint={onDeleteStandalonePoint} onMessage={onMessage} />
 
         {measurePoints.length >= 2 && <Polyline positions={measurePoints.map((point) => [point.lat, point.lng])} pathOptions={{ color: '#ef4444', weight: 3, dashArray: '8 7' }} />}

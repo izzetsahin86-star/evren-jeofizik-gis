@@ -186,7 +186,7 @@ function LayerPanel(props: BottomPanelProps) {
               </button>
               <button type="button" onClick={() => props.onCycleColor(layer.id)} aria-label="Renk değiştir"><Palette size={16} /></button>
               <button type="button" onClick={() => props.onDuplicatePolygon(layer.id)} aria-label="Kopyala"><Copy size={16} /></button>
-              <button type="button" onClick={() => props.onDeletePolygon(layer.id)} aria-label="Poligonu sil" disabled={props.polygons.length === 1}><Trash2 size={16} /></button>
+              <button type="button" onClick={() => props.onDeletePolygon(layer.id)} aria-label="Poligonu sil"><Trash2 size={16} /></button>
             </div>
           ))}
         </div>

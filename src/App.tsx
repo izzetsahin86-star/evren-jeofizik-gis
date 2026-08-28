@@ -231,9 +231,22 @@ export default function App() {
   }
 
   const deletePolygon = (id: string) => {
-    if (polygons.length === 1) return
+    if (polygons.length === 1) {
+      const blank = createPolygon()
+      updatePolygons(() => [blank])
+      setActiveId(blank.id)
+      return
+    }
     updatePolygons((current) => current.filter((layer) => layer.id !== id))
     if (activeId === id) setActiveId(polygons.find((layer) => layer.id !== id)?.id ?? '')
+  }
+
+  const deletePolygonPoint = (polygonId: string, pointId: string) => {
+    updatePolygons((current) => current.map((layer) => (
+      layer.id === polygonId
+        ? { ...layer, points: layer.points.filter((point) => point.id !== pointId) }
+        : layer
+    )))
   }
 
   const duplicatePolygon = (id: string) => {
@@ -335,6 +348,8 @@ export default function App() {
         })}
         onRenameStandalonePoint={(pointId, name) => setStandalonePoints((current) => current.map((point) => point.id === pointId ? { ...point, name: name.slice(0, 80) } : point))}
         onDeleteStandalonePoint={(pointId) => setStandalonePoints((current) => current.filter((point) => point.id !== pointId))}
+        onDeletePolygonPoint={deletePolygonPoint}
+        onDeletePolygon={deletePolygon}
         onUpdatePoint={updatePoint}
         onLocate={(point) => setFlyTarget({ ...point, zoom: 17 })}
         onMessage={message}

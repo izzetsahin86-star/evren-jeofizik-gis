@@ -104,7 +104,15 @@ function kmlColor(hex: string, opacity = 1) {
 }
 
 function safeKmlName(value: string) {
-  return value.trim().replace(/[^a-zA-Z0-9ğüşöçıİĞÜŞÖÇ_-]+/g, '-') || 'evren-jeofizik'
+  return value
+    .trim()
+    .replace(/[<>:"/\\|?*]/g, '-')
+    .replace(/[. ]+$/g, '')
+    .slice(0, 120) || 'Evren Jeofizik GIS'
+}
+
+function formatHectares(areaM2: number) {
+  return `${formatNumber(areaM2 / 10_000, 2)} ha`
 }
 
 function downloadKml(file: File) {
@@ -144,20 +152,12 @@ async function shareKmlFile(
   }
 }
 
-function pointKml(layer: PolygonLayer, point: GeoPoint, index: number) {
+function pointPlacemark(layer: PolygonLayer, point: GeoPoint, index: number) {
   const zone = Math.max(1, Math.min(60, Math.floor((point.lng + 180) / 6) + 1))
   const hemisphere: 'N' | 'S' = point.lat >= 0 ? 'N' : 'S'
   const utm = toUtm(point.lat, point.lng, zone, hemisphere)
   const name = `${layer.name} · Nokta ${index + 1}`
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-  <Document>
-    <name>${escapeKml(name)}</name>
-    <Style id="yellow-pin">
-      <IconStyle><scale>1.1</scale><Icon><href>https://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href></Icon></IconStyle>
-      <LabelStyle><scale>0.9</scale></LabelStyle>
-    </Style>
-    <Placemark>
+  return `<Placemark>
       <name>${escapeKml(name)}</name>
       <description>${escapeKml(`Enlem/Boylam: ${point.lat.toFixed(7)}, ${point.lng.toFixed(7)} | UTM: ${zone}${hemisphere} ${Math.round(utm.easting)} ${Math.round(utm.northing)}`)}</description>
       <styleUrl>#yellow-pin</styleUrl>
@@ -167,7 +167,20 @@ function pointKml(layer: PolygonLayer, point: GeoPoint, index: number) {
         <Data name="utm"><value>${zone}${hemisphere} ${Math.round(utm.easting)} ${Math.round(utm.northing)}</value></Data>
       </ExtendedData>
       <Point><coordinates>${point.lng.toFixed(8)},${point.lat.toFixed(8)},0</coordinates></Point>
-    </Placemark>
+    </Placemark>`
+}
+
+function pointKml(layer: PolygonLayer, point: GeoPoint, index: number) {
+  const name = `${layer.name} · Nokta ${index + 1}`
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${escapeKml(name)}</name>
+    <Style id="yellow-pin">
+      <IconStyle><scale>1.1</scale><Icon><href>https://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href></Icon></IconStyle>
+      <LabelStyle><scale>0.9</scale></LabelStyle>
+    </Style>
+    ${pointPlacemark(layer, point, index)}
   </Document>
 </kml>`
 }
@@ -185,14 +198,63 @@ function polygonKml(layer: PolygonLayer) {
       <LineStyle><color>${kmlColor(layer.color, layer.strokeOpacity ?? 1)}</color><width>${layer.strokeWidth ?? 3}</width></LineStyle>
       <PolyStyle><color>${kmlColor(layer.color, layer.fillOpacity ?? 0.14)}</color><fill>1</fill><outline>1</outline></PolyStyle>
     </Style>
+    <Style id="yellow-pin">
+      <IconStyle><scale>1.1</scale><Icon><href>https://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href></Icon></IconStyle>
+      <LabelStyle><scale>0.9</scale></LabelStyle>
+    </Style>
     <Placemark>
       <name>${escapeKml(layer.name)}</name>
-      <description>${escapeKml(`${layer.points.length} nokta${analysis.areaM2 > 0 ? ` | Alan: ${formatAreaShort(analysis.areaM2)}` : ''} | Evren Jeofizik GIS`)}</description>
+      <description>${escapeKml(`${layer.points.length} nokta${analysis.areaM2 > 0 ? ` | Alan: ${formatHectares(analysis.areaM2)}` : ''} | Evren Jeofizik GIS`)}</description>
       <styleUrl>#polygon-style</styleUrl>
       ${geometry}
     </Placemark>
+    <Folder>
+      <name>Poligon Noktaları</name>
+      ${layer.points.map((point, index) => pointPlacemark(layer, point, index)).join('\n      ')}
+    </Folder>
   </Document>
 </kml>`
+}
+
+interface KmlShareCardProps {
+  kind: string
+  title: string
+  detail: string
+  buttonLabel: string
+  kml: string
+  onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
+}
+
+function KmlShareCard({ kind, title, detail, buttonLabel, kml, onMessage }: KmlShareCardProps) {
+  const [filename, setFilename] = useState('Evren Jeofizik GIS')
+  const normalizedFilename = filename.trim()
+
+  return (
+    <div className="map-share-card">
+      <span className="map-share-kind">{kind}</span>
+      <strong>{title}</strong>
+      <small>{detail}</small>
+      <label className="map-share-filename">
+        <span>Dosya adı</span>
+        <input
+          type="text"
+          value={filename}
+          onChange={(event) => setFilename(event.target.value)}
+          onFocus={(event) => event.currentTarget.select()}
+          maxLength={80}
+          autoComplete="off"
+          aria-label="KML dosya adı"
+        />
+      </label>
+      <button
+        type="button"
+        disabled={!normalizedFilename}
+        onClick={() => void shareKmlFile(normalizedFilename, normalizedFilename, kml, onMessage)}
+      >
+        <Share2 size={16} /> {buttonLabel}
+      </button>
+    </div>
+  )
 }
 
 function desIcon() {
@@ -350,6 +412,24 @@ const PolygonLayerView = memo(function PolygonLayerView({
   onUpdatePoint: (pointId: string, point: Omit<GeoPoint, 'id'>) => void
   onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
 }) {
+  const [shareTarget, setShareTarget] = useState<
+    | { kind: 'polygon' | 'line'; position: [number, number] }
+    | { kind: 'point'; position: [number, number]; index: number }
+    | null
+  >(null)
+  const lastShareTap = useRef<{ key: string; timestamp: number } | null>(null)
+  const openShareOnSecondTap = useCallback((key: string, target: NonNullable<typeof shareTarget>, event: LeafletMouseEvent) => {
+    event.originalEvent.preventDefault()
+    event.originalEvent.stopPropagation()
+    const timestamp = Date.now()
+    const previous = lastShareTap.current
+    if (previous?.key === key && timestamp - previous.timestamp <= 450) {
+      lastShareTap.current = null
+      setShareTarget(target)
+      return
+    }
+    lastShareTap.current = { key, timestamp }
+  }, [])
   const strokeWidth = layer.strokeWidth ?? 3
   const strokeOpacity = layer.strokeOpacity ?? 1
   const fillOpacity = layer.fillOpacity ?? 0.14
@@ -370,27 +450,23 @@ const PolygonLayerView = memo(function PolygonLayerView({
             weight: isActive ? strokeWidth : Math.max(1, strokeWidth - 1),
             opacity: isActive ? strokeOpacity : strokeOpacity * 0.55,
           }}
-        >
-          <Popup className="map-share-popup">
-            <div className="map-share-card">
-              <span className="map-share-kind">Poligon</span>
-              <strong>{layer.name}</strong>
-              <small>{layer.points.length} nokta · {formatAreaShort(polygonAreaM2)}</small>
-              <button type="button" onClick={() => void shareKmlFile(layer.name, layer.name, polygonKml(layer), onMessage)}><Share2 size={16} /> Poligonu KML Olarak Paylaş</button>
-            </div>
-          </Popup>
-        </Polygon>
+          eventHandlers={{
+            click(event) {
+              openShareOnSecondTap('polygon', { kind: 'polygon', position: [event.latlng.lat, event.latlng.lng] }, event)
+            },
+          }}
+        />
       ) : layer.points.length >= 2 ? (
-        <Polyline positions={layer.points.map((point) => [point.lat, point.lng])} bubblingMouseEvents={false} pathOptions={{ color: layer.color, weight: strokeWidth, opacity: strokeOpacity }}>
-          <Popup className="map-share-popup">
-            <div className="map-share-card">
-              <span className="map-share-kind">Hat</span>
-              <strong>{layer.name}</strong>
-              <small>{layer.points.length} nokta</small>
-              <button type="button" onClick={() => void shareKmlFile(layer.name, layer.name, polygonKml(layer), onMessage)}><Share2 size={16} /> Hattı KML Olarak Paylaş</button>
-            </div>
-          </Popup>
-        </Polyline>
+        <Polyline
+          positions={layer.points.map((point) => [point.lat, point.lng])}
+          bubblingMouseEvents={false}
+          pathOptions={{ color: layer.color, weight: strokeWidth, opacity: strokeOpacity }}
+          eventHandlers={{
+            click(event) {
+              openShareOnSecondTap('line', { kind: 'line', position: [event.latlng.lat, event.latlng.lng] }, event)
+            },
+          }}
+        />
       ) : null}
 
       {markerIndexes.map((index) => {
@@ -402,25 +478,51 @@ const PolygonLayerView = memo(function PolygonLayerView({
             icon={numberIcon(index + 1, layer.color, isActive)}
             title={`${layer.name} · Nokta ${index + 1}`}
             draggable={isActive && !performanceMode}
+            bubblingMouseEvents={false}
             eventHandlers={{
               dragend(event) {
                 const location = event.target.getLatLng()
                 onUpdatePoint(point.id, { lat: location.lat, lng: location.lng })
               },
+              click(event) {
+                openShareOnSecondTap(`point-${point.id}`, { kind: 'point', position: [point.lat, point.lng], index }, event)
+              },
             }}
           >
             <Tooltip direction="top">{layer.name} · Nokta {index + 1}<br />{point.lat.toFixed(6)}, {point.lng.toFixed(6)}</Tooltip>
-            <Popup className="map-share-popup">
-              <div className="map-share-card">
-                <span className="map-share-kind">Koordinat noktası</span>
-                <strong>{layer.name} · Nokta {index + 1}</strong>
-                <small>{point.lat.toFixed(7)}, {point.lng.toFixed(7)}</small>
-                <button type="button" onClick={() => void shareKmlFile(`${layer.name} · Nokta ${index + 1}`, `${layer.name}-nokta-${index + 1}`, pointKml(layer, point, index), onMessage)}><Share2 size={16} /> Noktayı KML Olarak Paylaş</button>
-              </div>
-            </Popup>
           </Marker>
         )
       })}
+
+      {shareTarget && (
+        <Popup
+          position={shareTarget.position}
+          className="map-share-popup"
+          eventHandlers={{ remove: () => setShareTarget(null) }}
+        >
+          {shareTarget.kind === 'point' ? (
+            layer.points[shareTarget.index] ? (
+              <KmlShareCard
+                kind="Koordinat noktası"
+                title={`${layer.name} · Nokta ${shareTarget.index + 1}`}
+                detail={`${layer.points[shareTarget.index].lat.toFixed(7)}, ${layer.points[shareTarget.index].lng.toFixed(7)}`}
+                buttonLabel="Noktayı KML Olarak Paylaş"
+                kml={pointKml(layer, layer.points[shareTarget.index], shareTarget.index)}
+                onMessage={onMessage}
+              />
+            ) : null
+          ) : (
+            <KmlShareCard
+              kind={shareTarget.kind === 'polygon' ? 'Poligon' : 'Hat'}
+              title={layer.name}
+              detail={`${layer.points.length} nokta${shareTarget.kind === 'polygon' ? ` · ${formatHectares(polygonAreaM2)}` : ''}`}
+              buttonLabel={shareTarget.kind === 'polygon' ? 'Poligonu KML Olarak Paylaş' : 'Hattı KML Olarak Paylaş'}
+              kml={polygonKml(layer)}
+              onMessage={onMessage}
+            />
+          )}
+        </Popup>
+      )}
 
       {desIndexes.map((index) => {
         const point = layer.desPoints[index]
@@ -679,7 +781,7 @@ export default function MapWorkspace({
       data-card-scale={displaySettings.cardScale}
       aria-label="Jeofizik çalışma haritası"
     >
-      <MapContainer center={MAP_CENTER} zoom={6} zoomControl={false} attributionControl preferCanvas ref={mapRef} className="map-canvas">
+      <MapContainer center={MAP_CENTER} zoom={6} zoomControl={false} doubleClickZoom={false} attributionControl preferCanvas ref={mapRef} className="map-canvas">
         <TileLayer key={baseLayer} url={tileLayers[baseLayer].url} attribution={tileLayers[baseLayer].attribution} />
         {mtaIndex25Visible ? (
           <TileLayer

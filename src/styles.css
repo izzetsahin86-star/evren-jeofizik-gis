@@ -87,8 +87,13 @@ button { color: inherit; -webkit-tap-highlight-color: transparent; touch-action:
 .map-share-card .map-share-kind { width: max-content; padding: 3px 7px; border-radius: 999px; color: #8a6500; background: #fef9c3; font-size: 8px; font-weight: 850; text-transform: uppercase; letter-spacing: .04em; }
 .map-share-card strong { padding-right: 18px; font-size: 12px; line-height: 1.35; }
 .map-share-card small { color: #64748b; font-size: 9px; line-height: 1.4; }
+.map-share-filename { margin-top: 4px; display: grid; gap: 4px; }
+.map-share-filename span { color: #64748b; font-size: 8px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; }
+.map-share-filename input { width: 100%; height: 38px; padding: 0 10px; border: 1px solid #d5dfe9; border-radius: 10px; color: #172033; background: #fff; font-size: 11px; font-weight: 750; outline: 0; }
+.map-share-filename input:focus { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.13); }
 .map-share-card button { min-height: 42px; margin-top: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 12px; color: #fff; background: linear-gradient(135deg,#eab308,#f59e0b); box-shadow: 0 7px 16px rgba(234,179,8,.25); font-size: 10px; font-weight: 850; cursor: pointer; }
 .map-share-card button:active { transform: scale(.97); }
+.map-share-card button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
 
 .coordinate-stack { position: absolute; left: 16px; top: 20px; z-index: 500; width: min(235px, calc(100vw - 150px)); min-width: 190px; display: grid; gap: 5px; contain: layout paint; font-variant-numeric: tabular-nums; transform: scale(var(--card-scale, 1)); transform-origin: top left; }
 .coordinate-card { width: 100%; height: 38px; min-width: 0; padding: 4px 9px; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 6px; border: 1px solid rgba(148,163,184,.65); border-radius: 13px; color: #111827; background: rgba(255,255,255,.97); box-shadow: 0 4px 12px rgba(15,23,42,.2); backdrop-filter: blur(12px); text-align: left; cursor: copy; }

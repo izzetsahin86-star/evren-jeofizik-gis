@@ -47,6 +47,7 @@ import {
   polygonsToKml,
   readSpatialFile,
   toUtm,
+  utmZoneForLng,
 } from '../geo'
 import type { BaseLayerId, CoordinateFormat, DisplaySettings, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer } from '../types'
 import { DEFAULT_EXPORT_POLYGON_STYLE } from '../exportStyle'
@@ -327,6 +328,37 @@ function CoordinatePanel(props: BottomPanelProps) {
 
   const coordinateIssues = useMemo(() => validateCoordinates(active.points, zone), [active.points, zone])
 
+  const formatListedPoint = (point: GeoPoint) => formatPoint(
+    point,
+    listFormat,
+    listFormat === 'utm' ? utmZoneForLng(point.lng) : zone,
+    datum,
+  )
+
+  const copyAllCoordinates = async () => {
+    const text = active.points.map(formatListedPoint).join('\n')
+    let copied = false
+
+    try {
+      await navigator.clipboard.writeText(text)
+      copied = true
+    } catch {
+      const input = document.createElement('textarea')
+      input.value = text
+      input.style.position = 'fixed'
+      input.style.opacity = '0'
+      document.body.appendChild(input)
+      input.select()
+      copied = document.execCommand('copy')
+      input.remove()
+    }
+
+    props.onMessage(
+      copied ? `${active.points.length} koordinat panoya kopyalandı.` : 'Koordinatlar panoya kopyalanamadı.',
+      copied ? 'success' : 'error',
+    )
+  }
+
   const fixSwappedPoint = (pointId: string) => {
     const point = active.points.find((candidate) => candidate.id === pointId)
     if (!point) return
@@ -457,10 +489,14 @@ function CoordinatePanel(props: BottomPanelProps) {
       <Card title="Koordinatlar" subtitle={`${active.points.length} nokta`} icon={<CircleDot size={19} />}>
         {active.points.length ? (
           <>
-            <div className="list-toolbar"><Segmented value={listFormat} options={coordinateOptions.map((option) => ({ ...option, label: option.label.split(' ')[0] }))} onChange={setListFormat} ariaLabel="Liste biçimi" /><button type="button" className="danger-text" onClick={props.onClearPoints}>Tümünü Sil</button></div>
+            <div className="list-toolbar"><Segmented value={listFormat} options={coordinateOptions.map((option) => ({ ...option, label: option.label.split(' ')[0] }))} onChange={setListFormat} ariaLabel="Liste biçimi" /></div>
+            <div className="coordinate-list-actions">
+              <button type="button" className="secondary-button" onClick={copyAllCoordinates}><Copy size={17} /> Tümünü Kopyala</button>
+              <button type="button" className="secondary-button danger-text" onClick={props.onClearPoints}><Trash2 size={17} /> Tümünü Sil</button>
+            </div>
             <ol className="coordinate-list">
               {active.points.slice(0, visiblePointCount).map((point, index) => (
-                <li key={point.id}><span className="point-number" style={{ background: active.color }}>{index + 1}</span><code>{formatPoint(point, listFormat, zone, datum)}</code><button type="button" onClick={() => props.onDeletePoint(point.id)} aria-label={`${index + 1}. noktayı sil`}><Trash2 size={15} /></button></li>
+                <li key={point.id}><span className="point-number" style={{ background: active.color }}>{index + 1}</span><code>{formatListedPoint(point)}</code><button type="button" onClick={() => props.onDeletePoint(point.id)} aria-label={`${index + 1}. noktayı sil`}><Trash2 size={15} /></button></li>
               ))}
             </ol>
             {active.points.length > visiblePointCount && <button type="button" className="secondary-button" onClick={() => setVisiblePointCount((value) => value + 200)}>Sonraki 200 noktayı göster · {active.points.length - visiblePointCount} kaldı</button>}

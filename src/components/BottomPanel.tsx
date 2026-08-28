@@ -701,7 +701,7 @@ function ImportPanel(props: BottomPanelProps) {
 }
 
 const reportSectionOptions: Array<{ key: keyof ReportSections; label: string; description: string }> = [
-  { key: 'map', label: 'Gelişmiş harita', description: 'Kuzey oku, ölçek, lejant ve kaynak' },
+  { key: 'map', label: 'Gerçek harita ekranı', description: 'Mevcut harita görünümünü 16:9 olarak ekler' },
   { key: 'des', label: 'DES planı', description: 'Yerleşim haritası ve koordinat tablosu' },
   { key: 'standalonePoints', label: 'Nokta kayıtları', description: 'Haritadaki bağımsız noktalar' },
   { key: 'fieldPoints', label: 'Saha kayıtları', description: 'Ad, simge, not ve koordinat bilgileri' },
@@ -814,7 +814,7 @@ function ExportPanel(props: BottomPanelProps) {
         {!totalPoints && <p className="form-note warning">Dışa aktarmak için koordinat ekleyin.</p>}
       </Card>
 
-      <Card title="Gelişmiş PDF Raporu" subtitle="Kurumsal kapak, seçilebilir içerik ve saha ekleri" icon={<FileSearch size={19} />} tone="amber">
+      <Card title="Gelişmiş PDF Raporu" subtitle="Akıllı mobil tasarım · En fazla 2 sayfa" icon={<FileSearch size={19} />} tone="amber">
         <div className="report-form-grid">
           <Field label="Proje adı"><input value={reportProject} onChange={(event) => setReportProject(event.target.value)} placeholder="Jeofizik Saha Projesi" /></Field>
           <Field label="Rapor no"><input value={reportNumber} onChange={(event) => setReportNumber(event.target.value)} placeholder="EJG-20260101-01" /></Field>
@@ -863,7 +863,7 @@ function ExportPanel(props: BottomPanelProps) {
           </div>
         )}
         <Field label="Rapor notu"><textarea rows={3} value={reportNotes} onChange={(event) => setReportNotes(event.target.value)} placeholder="Çalışma amacı ve saha notları…" /></Field>
-        <p className="form-note">Alanlar raporda hektar öncelikli; m², dekar ve km² karşılıklarıyla birlikte gösterilir.</p>
+        <p className="form-note">Gerçek harita ekranı kullanılır. Alanlar hektar öncelikli gösterilir ve rapor iki sayfayı geçmez.</p>
         <button type="button" className={`primary-button amber${reportBusy ? ' is-busy' : ''}`} onClick={exportPdf} disabled={!selectedPointCount || reportBusy}><FileDown size={18} /> {reportBusy ? 'Rapor Hazırlanıyor…' : 'Gelişmiş PDF İndir'}</button>
         {!selectedPointCount && <p className="form-note warning">Rapor için en az bir koordinatlı poligon seçin.</p>}
       </Card>

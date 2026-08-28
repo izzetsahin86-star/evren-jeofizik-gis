@@ -51,6 +51,7 @@ import {
   utmZoneForLng,
 } from '../geo'
 import type { BaseLayerId, CoordinateFormat, DisplaySettings, GeoPoint, PanelId, PerformanceMode, PolygonAppearance, PolygonLayer } from '../types'
+import type { ReportSections } from '../report'
 import { DEFAULT_EXPORT_POLYGON_STYLE } from '../exportStyle'
 import ExportPolygonStyleControls from './ExportPolygonStyleControls'
 import { Card, EmptyState, Field, Segmented, SheetHeader } from './PanelUi'
@@ -112,6 +113,7 @@ const visibilityOptions: Array<{ key: VisibilitySetting; label: string; descript
 interface BottomPanelProps {
   panel: PanelId
   polygons: PolygonLayer[]
+  standalonePoints: GeoPoint[]
   activeId: string
   baseLayer: BaseLayerId
   mtaIndex25Visible: boolean
@@ -698,26 +700,99 @@ function ImportPanel(props: BottomPanelProps) {
   )
 }
 
+const reportSectionOptions: Array<{ key: keyof ReportSections; label: string; description: string }> = [
+  { key: 'map', label: 'Gelişmiş harita', description: 'Kuzey oku, ölçek, lejant ve kaynak' },
+  { key: 'des', label: 'DES planı', description: 'Yerleşim haritası ve koordinat tablosu' },
+  { key: 'standalonePoints', label: 'Nokta kayıtları', description: 'Haritadaki bağımsız noktalar' },
+  { key: 'fieldPoints', label: 'Saha kayıtları', description: 'Ad, simge, not ve koordinat bilgileri' },
+  { key: 'photos', label: 'Fotoğraflar', description: 'Seçilen ve saha noktalarındaki fotoğraflar' },
+  { key: 'validation', label: 'Hata kontrolü', description: 'Koordinat doğrulama özeti' },
+  { key: 'routes', label: 'Rota arşivi', description: 'Mesafe, süre, tarih ve rota haritası' },
+]
+
+const defaultReportSections: ReportSections = {
+  map: true,
+  des: true,
+  standalonePoints: true,
+  fieldPoints: true,
+  photos: true,
+  validation: true,
+  routes: true,
+}
+
+function createReportNumber() {
+  const date = new Date()
+  const datePart = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('')
+  return `EJG-${datePart}-01`
+}
+
+function areaDetailsForPanel(layer: PolygonLayer) {
+  return `${formatNumber(analyzePolygon(layer.points).areaM2 / 10_000, 4)} ha`
+}
+
 function ExportPanel(props: BottomPanelProps) {
   const [filename, setFilename] = useState('evren-jeofizik-projesi')
   const [csvFormat, setCsvFormat] = useState<CoordinateFormat>('latlon')
   const [reportProject, setReportProject] = useState('Jeofizik Saha Projesi')
+  const [reportNumber, setReportNumber] = useState(createReportNumber)
   const [reportClient, setReportClient] = useState('')
   const [reportLocation, setReportLocation] = useState('')
+  const [reportPreparedBy, setReportPreparedBy] = useState('Evren Jeofizik')
   const [reportNotes, setReportNotes] = useState('')
-  const [includeMap, setIncludeMap] = useState(true)
+  const [reportSections, setReportSections] = useState<ReportSections>(defaultReportSections)
+  const [selectedPolygonIds, setSelectedPolygonIds] = useState<Set<string>>(() => new Set(props.polygons.map((layer) => layer.id)))
+  const [reportPhotos, setReportPhotos] = useState<File[]>([])
   const [reportBusy, setReportBusy] = useState(false)
   const [exportStyle, setExportStyle] = useState(DEFAULT_EXPORT_POLYGON_STYLE)
   const totalPoints = props.polygons.reduce((sum, layer) => sum + layer.points.length, 0)
+  const selectedPolygons = props.polygons.filter((layer) => selectedPolygonIds.has(layer.id))
+  const selectedPointCount = selectedPolygons.reduce((sum, layer) => sum + layer.points.length, 0)
+  const allPolygonsSelected = props.polygons.length > 0 && selectedPolygons.length === props.polygons.length
   const safeName = filename.trim().replace(/[^a-zA-Z0-9ğüşöçıİĞÜŞÖÇ_-]+/g, '-') || 'evren-jeofizik-projesi'
+
+  const togglePolygon = (id: string) => {
+    setSelectedPolygonIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAllPolygons = () => {
+    setSelectedPolygonIds(allPolygonsSelected ? new Set() : new Set(props.polygons.map((layer) => layer.id)))
+  }
+
+  const selectReportPhotos = (event: ChangeEvent<HTMLInputElement>) => {
+    setReportPhotos(Array.from(event.target.files ?? []))
+  }
 
   const exportPdf = async () => {
     setReportBusy(true)
     try {
       const { exportProjectPdf } = await import('../report')
-      await exportProjectPdf({ polygons: props.polygons, filename: safeName, metadata: { projectName: reportProject, client: reportClient, location: reportLocation, notes: reportNotes }, includeMap })
+      await exportProjectPdf({
+        polygons: props.polygons,
+        standalonePoints: props.standalonePoints,
+        filename: safeName,
+        metadata: {
+          projectName: reportProject,
+          reportNumber,
+          client: reportClient,
+          location: reportLocation,
+          preparedBy: reportPreparedBy,
+          notes: reportNotes,
+        },
+        selectedPolygonIds: Array.from(selectedPolygonIds),
+        sections: reportSections,
+        baseLayer: props.baseLayer,
+        mtaIndex25Visible: props.mtaIndex25Visible,
+        mtaIndex100Visible: props.mtaIndex100Visible,
+        manualPhotos: reportPhotos,
+      })
       props.onMessage('Gelişmiş PDF raporu hazırlandı.', 'success')
-    } catch {
+    } catch (error) {
+      console.error(error)
       props.onMessage('PDF raporu hazırlanamadı.', 'error')
     } finally {
       setReportBusy(false)
@@ -738,13 +813,59 @@ function ExportPanel(props: BottomPanelProps) {
         </div>
         {!totalPoints && <p className="form-note warning">Dışa aktarmak için koordinat ekleyin.</p>}
       </Card>
-      <Card title="Gelişmiş PDF Raporu" subtitle="Harita, proje bilgileri, koordinat ve kenar tabloları" icon={<FileSearch size={19} />} tone="amber">
-        <Field label="Proje adı"><input value={reportProject} onChange={(event) => setReportProject(event.target.value)} placeholder="Jeofizik Saha Projesi" /></Field>
-        <div className="form-grid two"><Field label="Müşteri"><input value={reportClient} onChange={(event) => setReportClient(event.target.value)} placeholder="Müşteri / kurum" /></Field><Field label="Konum"><input value={reportLocation} onChange={(event) => setReportLocation(event.target.value)} placeholder="İl, ilçe, saha" /></Field></div>
+
+      <Card title="Gelişmiş PDF Raporu" subtitle="Kurumsal kapak, seçilebilir içerik ve saha ekleri" icon={<FileSearch size={19} />} tone="amber">
+        <div className="report-form-grid">
+          <Field label="Proje adı"><input value={reportProject} onChange={(event) => setReportProject(event.target.value)} placeholder="Jeofizik Saha Projesi" /></Field>
+          <Field label="Rapor no"><input value={reportNumber} onChange={(event) => setReportNumber(event.target.value)} placeholder="EJG-20260101-01" /></Field>
+          <Field label="Müşteri"><input value={reportClient} onChange={(event) => setReportClient(event.target.value)} placeholder="Müşteri / kurum" /></Field>
+          <Field label="Çalışma alanı"><input value={reportLocation} onChange={(event) => setReportLocation(event.target.value)} placeholder="İl, ilçe, saha" /></Field>
+          <Field label="Hazırlayan"><input value={reportPreparedBy} onChange={(event) => setReportPreparedBy(event.target.value)} placeholder="Ad soyad / ekip" /></Field>
+        </div>
+
+        <div className="report-picker-heading">
+          <span><strong>Rapora girecek poligonlar</strong><small>{selectedPolygons.length} poligon · {selectedPointCount} nokta</small></span>
+          <button type="button" onClick={toggleAllPolygons}>{allPolygonsSelected ? 'Tümünü kaldır' : 'Tümünü seç'}</button>
+        </div>
+        <div className="report-polygon-list">
+          {props.polygons.map((layer) => (
+            <label key={layer.id}>
+              <input type="checkbox" checked={selectedPolygonIds.has(layer.id)} onChange={() => togglePolygon(layer.id)} />
+              <span className="report-color-dot" style={{ backgroundColor: layer.color }} />
+              <span><strong>{layer.name}</strong><small>{layer.points.length} nokta · {areaDetailsForPanel(layer)}</small></span>
+            </label>
+          ))}
+        </div>
+
+        <div className="report-picker-heading"><span><strong>Rapor bölümleri</strong><small>İstemediğiniz bölümü kapatabilirsiniz</small></span></div>
+        <div className="report-section-grid">
+          {reportSectionOptions.map((option) => (
+            <label key={option.key} className="report-section-option">
+              <input
+                type="checkbox"
+                checked={reportSections[option.key]}
+                onChange={(event) => setReportSections((current) => ({ ...current, [option.key]: event.target.checked }))}
+              />
+              <span><strong>{option.label}</strong><small>{option.description}</small></span>
+            </label>
+          ))}
+        </div>
+
+        <label className="report-photo-picker">
+          <Upload size={20} />
+          <span><strong>Proje fotoğrafı seç</strong><small>JPG, PNG veya WebP · Birden fazla seçilebilir</small></span>
+          <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={selectReportPhotos} />
+        </label>
+        {reportPhotos.length > 0 && (
+          <div className="report-photo-summary">
+            <span>{reportPhotos.length} fotoğraf seçildi</span>
+            <button type="button" onClick={() => setReportPhotos([])}><X size={14} /> Temizle</button>
+          </div>
+        )}
         <Field label="Rapor notu"><textarea rows={3} value={reportNotes} onChange={(event) => setReportNotes(event.target.value)} placeholder="Çalışma amacı ve saha notları…" /></Field>
-        <label className="check-row"><input type="checkbox" checked={includeMap} onChange={(event) => setIncludeMap(event.target.checked)} /><span><strong>Harita görüntüsünü ekle</strong><small>Mevcut harita görünümü rapor kapağına yerleştirilir.</small></span></label>
-        <button type="button" className={`primary-button amber${reportBusy ? ' is-busy' : ''}`} onClick={exportPdf} disabled={!totalPoints || reportBusy}><FileDown size={18} /> {reportBusy ? 'Rapor Hazırlanıyor…' : 'Gelişmiş PDF İndir'}</button>
-        {!totalPoints && <p className="form-note">Rapor için koordinat ekleyin.</p>}
+        <p className="form-note">Alanlar raporda hektar öncelikli; m², dekar ve km² karşılıklarıyla birlikte gösterilir.</p>
+        <button type="button" className={`primary-button amber${reportBusy ? ' is-busy' : ''}`} onClick={exportPdf} disabled={!selectedPointCount || reportBusy}><FileDown size={18} /> {reportBusy ? 'Rapor Hazırlanıyor…' : 'Gelişmiş PDF İndir'}</button>
+        {!selectedPointCount && <p className="form-note warning">Rapor için en az bir koordinatlı poligon seçin.</p>}
       </Card>
     </div>
   )

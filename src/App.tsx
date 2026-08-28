@@ -359,6 +359,7 @@ export default function App() {
         <BottomPanel
           panel={activePanel}
           polygons={polygons}
+          standalonePoints={standalonePoints}
           activeId={activeId}
           baseLayer={baseLayer}
           mtaIndex25Visible={mtaIndex25Visible}

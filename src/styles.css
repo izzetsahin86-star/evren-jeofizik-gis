@@ -398,6 +398,34 @@ button { color: inherit; -webkit-tap-highlight-color: transparent; touch-action:
 .export-grid button:active { transform:scale(.93); }
 .export-grid button:disabled { color: #b7c0ca; background: #f6f7f8; cursor: not-allowed; }
 .export-grid strong { font-size: 11px; }
+.report-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+.report-form-grid .form-field:first-child { grid-column:1 / -1; }
+.report-picker-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; padding-top:3px; }
+.report-picker-heading > span { min-width:0; display:grid; gap:2px; }
+.report-picker-heading strong { color:#263445; font-size:10px; }
+.report-picker-heading small { color:#8794a3; font-size:8px; }
+.report-picker-heading button { flex:0 0 auto; min-height:34px; padding:0 11px; border:1px solid #d7e1e8; border-radius:11px; color:#146b61; background:#f2fbf8; font-size:9px; font-weight:800; cursor:pointer; transition:transform .14s ease,background .18s ease; }
+.report-picker-heading button:active { transform:scale(.94); }
+.report-polygon-list { max-height:172px; display:grid; gap:6px; overflow:auto; padding:2px; scrollbar-width:thin; }
+.report-polygon-list label { min-height:48px; display:grid; grid-template-columns:20px 10px minmax(0,1fr); align-items:center; gap:8px; padding:7px 9px; border:1px solid #e2e8ef; border-radius:13px; background:#fbfdfe; cursor:pointer; }
+.report-polygon-list input,.report-section-option input { width:18px; height:18px; margin:0; accent-color:#0d806e; }
+.report-color-dot { width:9px; height:9px; border-radius:50%; box-shadow:0 0 0 3px rgba(148,163,184,.12); }
+.report-polygon-list label > span:last-child { min-width:0; display:grid; gap:2px; }
+.report-polygon-list strong { overflow:hidden; color:#2c3a4b; font-size:10px; white-space:nowrap; text-overflow:ellipsis; }
+.report-polygon-list small { color:#8a96a4; font-size:8px; }
+.report-section-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+.report-section-option { min-height:64px; display:grid; grid-template-columns:20px minmax(0,1fr); align-items:start; gap:8px; padding:9px; border:1px solid #e2e8ef; border-radius:13px; background:#fbfdfe; cursor:pointer; }
+.report-section-option:has(input:checked) { border-color:#a7d8cb; background:#f1fbf8; box-shadow:0 4px 12px rgba(13,128,110,.07); }
+.report-section-option span { display:grid; gap:3px; }
+.report-section-option strong { color:#2d3b4c; font-size:9px; line-height:1.2; }
+.report-section-option small { color:#8592a1; font-size:7.5px; line-height:1.35; }
+.report-photo-picker { min-height:66px; display:grid; grid-template-columns:34px minmax(0,1fr); align-items:center; gap:9px; padding:10px; border:1px dashed #d3a733; border-radius:14px; color:#a16207; background:#fffbeb; cursor:pointer; }
+.report-photo-picker > span { display:grid; gap:2px; }
+.report-photo-picker strong { font-size:10px; }
+.report-photo-picker small { color:#9a7a36; font-size:8px; }
+.report-photo-picker input { position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none; }
+.report-photo-summary { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 9px; border-radius:11px; color:#375164; background:#eef5f8; font-size:9px; font-weight:700; }
+.report-photo-summary button { min-height:32px; display:flex; align-items:center; gap:5px; padding:0 9px; border:0; border-radius:9px; color:#8b3a2d; background:#fff1ed; font-size:8px; font-weight:800; cursor:pointer; }
 
 .export-style-control { display: grid; gap: 11px; padding: 13px; border: 1px solid #dce5ed; border-radius: 16px; background: #f8fafc; }
 .export-style-heading { display: grid; gap: 2px; }

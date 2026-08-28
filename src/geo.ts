@@ -132,6 +132,28 @@ export function formatPoint(point: GeoPoint, format: CoordinateFormat, zone = ut
   return `${utm.zone}${utm.hemisphere} ${utm.easting.toFixed(2)} ${utm.northing.toFixed(2)}`
 }
 
+function projectedUtmArea(points: GeoPoint[]) {
+  if (points.length < 3) return 0
+  const averageLat = points.reduce((sum, point) => sum + point.lat, 0) / points.length
+  const averageLng = points.reduce((sum, point) => sum + point.lng, 0) / points.length
+  const sameHemisphere = points.every((point) => point.lat >= 0) || points.every((point) => point.lat <= 0)
+  const utmSupported = sameHemisphere && points.every((point) => point.lat >= -80 && point.lat <= 84)
+  if (!utmSupported) return null
+
+  const zone = utmZoneForLng(averageLng)
+  const hemisphere: 'N' | 'S' = averageLat >= 0 ? 'N' : 'S'
+  try {
+    const projected = points.map((point) => toUtm(point.lat, point.lng, zone, hemisphere))
+    const doubleArea = projected.reduce((sum, point, index) => {
+      const next = projected[(index + 1) % projected.length]
+      return sum + point.easting * next.northing - next.easting * point.northing
+    }, 0)
+    return Math.abs(doubleArea) / 2
+  } catch {
+    return null
+  }
+}
+
 export function analyzePolygon(points: GeoPoint[]): AnalysisResult {
   if (points.length === 0) return { areaM2: 0, perimeterM: 0, centroid: null, edgeLengths: [], edgeBearings: [] }
   const edgeLengths: number[] = []
@@ -149,8 +171,9 @@ export function analyzePolygon(points: GeoPoint[]): AnalysisResult {
   const ring = [...points.map((p) => [p.lng, p.lat] as [number, number]), [points[0].lng, points[0].lat] as [number, number]]
   const polygon = turfPolygon([ring])
   const center = turfCentroid(polygon).geometry.coordinates
+  const utmAreaM2 = projectedUtmArea(points)
   return {
-    areaM2: turfArea(polygon),
+    areaM2: utmAreaM2 ?? turfArea(polygon),
     perimeterM: turfLength(polygon, { units: 'meters' }),
     centroid: { id: 'centroid', lat: center[1], lng: center[0] },
     edgeLengths,

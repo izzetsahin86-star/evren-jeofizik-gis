@@ -94,7 +94,6 @@ button { color: inherit; -webkit-tap-highlight-color: transparent; touch-action:
 .map-share-actions { margin-top: 5px; display: grid; gap: 6px; }
 .map-share-card button { min-height: 42px; margin-top: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 12px; color: #fff; background: linear-gradient(135deg,#eab308,#f59e0b); box-shadow: 0 7px 16px rgba(234,179,8,.25); font-size: 10px; font-weight: 850; cursor: pointer; }
 .map-share-actions button { margin-top: 0; }
-.map-share-actions button.map-share-delete { min-height: 36px; color: #be3144; border: 1px solid #fecdd3; background: #fff1f2; box-shadow: none; }
 .map-share-card button:active { transform: scale(.97); }
 .map-share-card button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
 .map-delete-popup .leaflet-popup-content-wrapper { border: 1px solid #fecdd3; border-radius: 18px; box-shadow: 0 16px 38px rgba(127,29,29,.2); }

@@ -260,11 +260,10 @@ interface KmlShareCardProps {
   kml: string
   createKml?: (title: string) => string
   onTitleCommit?: (title: string) => void
-  onDelete?: () => void
   onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
 }
 
-function KmlShareCard({ kind, title, titleLabel, detail, buttonLabel, kml, createKml, onTitleCommit, onDelete, onMessage }: KmlShareCardProps) {
+function KmlShareCard({ kind, title, titleLabel, detail, buttonLabel, kml, createKml, onTitleCommit, onMessage }: KmlShareCardProps) {
   const [filename, setFilename] = useState('Evren Jeofizik GIS')
   const [titleDraft, setTitleDraft] = useState(title)
   const normalizedFilename = filename.trim()
@@ -309,7 +308,7 @@ function KmlShareCard({ kind, title, titleLabel, detail, buttonLabel, kml, creat
           aria-label="KML dosya adı"
         />
       </label>
-      <div className={`map-share-actions${onDelete ? ' has-delete' : ''}`}>
+      <div className="map-share-actions">
         <button
           type="button"
           disabled={!normalizedFilename}
@@ -317,7 +316,6 @@ function KmlShareCard({ kind, title, titleLabel, detail, buttonLabel, kml, creat
         >
           <Share2 size={16} /> {buttonLabel}
         </button>
-        {onDelete ? <button type="button" className="map-share-delete" onClick={onDelete}><Trash2 size={15} /> Noktayı Sil</button> : null}
       </div>
     </div>
   )
@@ -767,10 +765,6 @@ const StandalonePointLayer = memo(function StandalonePointLayer({
             kml={namedPointKml(selectedPoint.name?.trim() || `Nokta ${selectedIndex + 1}`, selectedPoint)}
             createKml={(name) => namedPointKml(name, selectedPoint)}
             onTitleCommit={(name) => onRenamePoint(selectedPoint.id, name)}
-            onDelete={() => {
-              setSharePointId(null)
-              setDeletePointId(selectedPoint.id)
-            }}
             onMessage={onMessage}
           />
         </Popup>

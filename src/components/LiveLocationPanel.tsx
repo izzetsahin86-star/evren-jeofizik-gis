@@ -5,8 +5,9 @@ import {
   BellRing,
   CircleGauge,
   Compass,
+  FileArchive,
+  FileDown,
   LocateFixed,
-  MapPinned,
   Navigation,
   Pause,
   Play,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react'
 import type { PolygonLayer } from '../types'
 import { LIVE_TRACK_STATUS_EVENT, sendLiveTrackCommand, type LiveTrackStatus } from '../liveTrackingBridge'
+import { downloadRouteKml, downloadRouteKmz } from '../routeExport'
 import { Card, Field, SheetHeader } from './PanelUi'
 
 const TRACK_STORAGE_KEY = 'evren-jeofizik-gis-live-track-v1'
@@ -67,7 +69,6 @@ interface LiveLocationPanelProps {
   onEnsureLocationCard: () => void
   onClose: () => void
   onFlyTo: (target: { lat: number; lng: number; zoom?: number }) => void
-  onConvertTrackToPolygon: (points: Array<{ lat: number; lng: number }>) => void
   onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
 }
 
@@ -208,6 +209,11 @@ function numberBadge(value: number) {
   return <span className="live-feature-number">{value}</span>
 }
 
+function defaultRouteName() {
+  const now = new Date()
+  return `Evren Jeofizik Rota ${now.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
+}
+
 export default function LiveLocationPanel({
   active,
   polygons,
@@ -215,7 +221,6 @@ export default function LiveLocationPanel({
   onEnsureLocationCard,
   onClose,
   onFlyTo,
-  onConvertTrackToPolygon,
   onMessage,
 }: LiveLocationPanelProps) {
   const [rawTrack, setRawTrack] = useState<TrackPoint[]>(readTrack)
@@ -230,6 +235,7 @@ export default function LiveLocationPanel({
   const [wakeLockActive, setWakeLockActive] = useState(false)
   const [mapHost, setMapHost] = useState<HTMLElement | null>(null)
   const [monitorMessage, setMonitorMessage] = useState('GPS hazır')
+  const [exportName, setExportName] = useState(defaultRouteName)
   const startingRef = useRef(false)
   const monitorWatchRef = useRef<number | null>(null)
   const wakeLockRef = useRef<any>(null)
@@ -352,7 +358,10 @@ export default function LiveLocationPanel({
   const trackPoints = useMemo(() => filterStationary(rawTrack, settings.skipStationary), [rawTrack, settings.skipStationary])
   const totalDistanceM = useMemo(() => trackDistance(trackPoints), [trackPoints])
   const segmentStart = meta.segmentBreaks.at(-1) ?? 0
-  const segmentPoints = useMemo(() => trackPoints.slice(Math.min(segmentStart, trackPoints.length)), [trackPoints, segmentStart])
+  const segmentPoints = useMemo(
+    () => filterStationary(rawTrack.slice(Math.min(segmentStart, rawTrack.length)), settings.skipStationary),
+    [rawTrack, segmentStart, settings.skipStationary],
+  )
   const segmentDistanceM = useMemo(() => trackDistance(segmentPoints), [segmentPoints])
   const firstTimestamp = meta.startedAt ?? trackPoints[0]?.timestamp ?? null
   const lastTimestamp = trackPoints.at(-1)?.timestamp ?? null
@@ -561,7 +570,7 @@ export default function LiveLocationPanel({
 
   const newSegment = () => {
     if (!tracking) return
-    const index = trackPoints.length
+    const index = rawTrack.length
     setMeta((current) => ({ ...current, segmentBreaks: [...current.segmentBreaks.filter((value) => value < index), index] }))
     onMessage(`Yeni segment / tur başlatıldı · ${meta.segmentBreaks.length + 1}. segment`, 'success')
   }
@@ -574,13 +583,24 @@ export default function LiveLocationPanel({
     setMeta({ startedAt: null, segmentBreaks: [0] })
   }
 
-  const convertTrack = () => {
-    if (trackPoints.length < 3) {
-      onMessage('Poligona dönüştürmek için en az 3 GPS noktası gerekir.', 'error')
-      return
+  const exportKml = () => {
+    if (tracking || rawTrack.length < 2 || !exportName.trim()) return
+    try {
+      downloadRouteKml(exportName, rawTrack, meta.segmentBreaks)
+      onMessage('Rota KML olarak dışa aktarıldı.', 'success')
+    } catch {
+      onMessage('KML dışa aktarımı başlatılamadı.', 'error')
     }
-    if (tracking) stopRecorder()
-    onConvertTrackToPolygon(trackPoints.map(({ lat, lng }) => ({ lat, lng })))
+  }
+
+  const exportKmz = async () => {
+    if (tracking || rawTrack.length < 2 || !exportName.trim()) return
+    try {
+      await downloadRouteKmz(exportName, rawTrack, meta.segmentBreaks)
+      onMessage('Rota KMZ olarak dışa aktarıldı.', 'success')
+    } catch {
+      onMessage('KMZ dışa aktarımı başlatılamadı.', 'error')
+    }
   }
 
   const requestCompass = async () => {
@@ -684,6 +704,7 @@ export default function LiveLocationPanel({
                   <div className="live-status-cell"><small>Segment</small><strong>{meta.segmentBreaks.length}</strong></div>
                   <div className="live-status-cell"><small>Bu Segment</small><strong>{formatDistance(segmentDistanceM)}</strong></div>
                 </div>
+                {rawTrack.length ? <Field label="Rota dosya adı"><input type="text" value={exportName} onChange={(event) => setExportName(event.target.value)} maxLength={120} autoComplete="off" /></Field> : null}
                 <div className="live-action-grid">
                   {tracking ? (
                     <>
@@ -698,11 +719,12 @@ export default function LiveLocationPanel({
                   ) : (
                     <button type="button" className="primary" style={{ gridColumn: '1 / -1' }} onClick={() => startRecorder('new')}><Play size={14} /> Canlı Kaydı Başlat</button>
                   )}
-                  <button type="button" onClick={convertTrack} disabled={trackPoints.length < 3}><MapPinned size={14} /> Kaydı Poligona Dönüştür</button>
+                  <button type="button" className="blue" onClick={exportKml} disabled={tracking || rawTrack.length < 2 || !exportName.trim()}><FileDown size={14} /> KML Dışa Aktar</button>
+                  <button type="button" className="blue" onClick={() => void exportKmz()} disabled={tracking || rawTrack.length < 2 || !exportName.trim()}><FileArchive size={14} /> KMZ Dışa Aktar</button>
                   <button type="button" onClick={clearTrack} disabled={!rawTrack.length || tracking}><Trash2 size={14} /> Kaydı Temizle</button>
                 </div>
                 <label className="live-toggle-row"><span><strong>Hareketsizken konumları atla</strong><small>GPS salınımını ve gereksiz noktaları azaltır</small></span><input type="checkbox" checked={settings.skipStationary} onChange={(event) => setLiveSettings({ skipStationary: event.target.checked })} /></label>
-                <p className="live-inline-note"><Pause size={12} /> Kaydedilen {rawTrack.length} ham GPS noktasından {trackPoints.length} saha noktası kullanılıyor.</p>
+                <p className="live-inline-note"><Pause size={12} /> Kaydedilen {rawTrack.length} ham GPS noktası ve segment ayrımları KML/KMZ içinde açık rota çizgisi olarak korunur. İlk ve son nokta birleştirilmez.</p>
               </Card>
 
               <Card title="GNSS Sinyal Uyarısı" subtitle="Sinyal kaybolduğunda veya hassasiyet düştüğünde uyarır" icon={numberBadge(3)} tone="amber">

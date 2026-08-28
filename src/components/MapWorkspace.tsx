@@ -222,21 +222,48 @@ function polygonKml(layer: PolygonLayer) {
 interface KmlShareCardProps {
   kind: string
   title: string
+  titleLabel?: string
   detail: string
   buttonLabel: string
   kml: string
+  createKml?: (title: string) => string
+  onTitleCommit?: (title: string) => void
   onDelete?: () => void
   onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
 }
 
-function KmlShareCard({ kind, title, detail, buttonLabel, kml, onDelete, onMessage }: KmlShareCardProps) {
+function KmlShareCard({ kind, title, titleLabel, detail, buttonLabel, kml, createKml, onTitleCommit, onDelete, onMessage }: KmlShareCardProps) {
   const [filename, setFilename] = useState('Evren Jeofizik GIS')
+  const [titleDraft, setTitleDraft] = useState(title)
   const normalizedFilename = filename.trim()
+  const normalizedTitle = titleDraft.trim() || title.trim()
+
+  const commitTitle = () => {
+    if (onTitleCommit && normalizedTitle !== title) onTitleCommit(normalizedTitle)
+  }
+
+  const shareFile = () => {
+    commitTitle()
+    void shareKmlFile(normalizedFilename, normalizedFilename, createKml?.(normalizedTitle) ?? kml, onMessage)
+  }
 
   return (
     <div className="map-share-card">
       <span className="map-share-kind">{kind}</span>
-      <strong>{title}</strong>
+      {onTitleCommit ? (
+        <label className="map-share-name">
+          <span>{titleLabel || 'Ad'}</span>
+          <input
+            type="text"
+            value={titleDraft}
+            onChange={(event) => setTitleDraft(event.target.value)}
+            onBlur={commitTitle}
+            maxLength={80}
+            autoComplete="off"
+            aria-label={titleLabel || 'Ad'}
+          />
+        </label>
+      ) : <strong>{title}</strong>}
       <small>{detail}</small>
       <label className="map-share-filename">
         <span>Dosya adı</span>
@@ -254,7 +281,7 @@ function KmlShareCard({ kind, title, detail, buttonLabel, kml, onDelete, onMessa
         <button
           type="button"
           disabled={!normalizedFilename}
-          onClick={() => void shareKmlFile(normalizedFilename, normalizedFilename, kml, onMessage)}
+          onClick={shareFile}
         >
           <Share2 size={16} /> {buttonLabel}
         </button>
@@ -550,10 +577,12 @@ const PolygonLayerView = memo(function PolygonLayerView({
 
 const StandalonePointLayer = memo(function StandalonePointLayer({
   points,
+  onRenamePoint,
   onDeletePoint,
   onMessage,
 }: {
   points: GeoPoint[]
+  onRenamePoint: (pointId: string, name: string) => void
   onDeletePoint: (pointId: string) => void
   onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
 }) {
@@ -565,7 +594,7 @@ const StandalonePointLayer = memo(function StandalonePointLayer({
   return (
     <Fragment>
       {points.map((point, index) => {
-        const name = point.name?.trim() || `Bağımsız Nokta ${index + 1}`
+        const name = point.name?.trim() || `Nokta ${index + 1}`
         return (
           <Marker
             key={point.id}
@@ -599,15 +628,18 @@ const StandalonePointLayer = memo(function StandalonePointLayer({
           eventHandlers={{ remove: () => setSharePointId(null) }}
         >
           <KmlShareCard
-            kind="Bağımsız nokta"
-            title={selectedPoint.name?.trim() || `Bağımsız Nokta ${selectedIndex + 1}`}
+            kind="Nokta"
+            title={selectedPoint.name ?? `Nokta ${selectedIndex + 1}`}
+            titleLabel="Nokta adı"
             detail={`${selectedPoint.lat.toFixed(7)}, ${selectedPoint.lng.toFixed(7)}`}
             buttonLabel="Noktayı KML Olarak Paylaş"
-            kml={namedPointKml(selectedPoint.name?.trim() || `Bağımsız Nokta ${selectedIndex + 1}`, selectedPoint)}
+            kml={namedPointKml(selectedPoint.name?.trim() || `Nokta ${selectedIndex + 1}`, selectedPoint)}
+            createKml={(name) => namedPointKml(name, selectedPoint)}
+            onTitleCommit={(name) => onRenamePoint(selectedPoint.id, name)}
             onDelete={() => {
               setSharePointId(null)
               onDeletePoint(selectedPoint.id)
-              onMessage('Bağımsız nokta silindi.', 'success')
+              onMessage('Nokta silindi.', 'success')
             }}
             onMessage={onMessage}
           />
@@ -636,6 +668,7 @@ interface MapWorkspaceProps {
   onToggleStandaloneAddMode: () => void
   onAddPoint: (point: Omit<GeoPoint, 'id'>) => void
   onAddStandalonePoint: (point: Omit<GeoPoint, 'id'>) => void
+  onRenameStandalonePoint: (pointId: string, name: string) => void
   onDeleteStandalonePoint: (pointId: string) => void
   onUpdatePoint: (pointId: string, point: Omit<GeoPoint, 'id'>) => void
   onLocate: (point: Omit<GeoPoint, 'id'>) => void
@@ -661,6 +694,7 @@ export default function MapWorkspace({
   onToggleStandaloneAddMode,
   onAddPoint,
   onAddStandalonePoint,
+  onRenameStandalonePoint,
   onDeleteStandalonePoint,
   onUpdatePoint,
   onLocate,
@@ -740,7 +774,7 @@ export default function MapWorkspace({
     const point = targetPosition(mapRef.current)
     if (standaloneAddMode) {
       onAddStandalonePoint({ lat: point.lat, lng: point.lng })
-      onMessage('Hedef merkezine bağımsız nokta eklendi.', 'success')
+      onMessage('Hedef merkezine nokta eklendi.', 'success')
       return
     }
     onAddPoint({ lat: point.lat, lng: point.lng })
@@ -905,13 +939,13 @@ export default function MapWorkspace({
           onAddPoint={onAddPoint}
           onAddStandalonePoint={(point) => {
             onAddStandalonePoint(point)
-            onMessage('Bağımsız nokta eklendi.', 'success')
+            onMessage('Nokta eklendi.', 'success')
           }}
           onMeasurePoint={(point) => setMeasurePoints((current) => [...current, point])}
           positionListener={positionListener}
         />
         {polygons.map((layer) => <PolygonLayerView key={layer.id} layer={layer} isActive={layer.id === activeId} performanceMode={performanceMode} onUpdatePoint={onUpdatePoint} onMessage={onMessage} />)}
-        <StandalonePointLayer points={standalonePoints} onDeletePoint={onDeleteStandalonePoint} onMessage={onMessage} />
+        <StandalonePointLayer points={standalonePoints} onRenamePoint={onRenameStandalonePoint} onDeletePoint={onDeleteStandalonePoint} onMessage={onMessage} />
 
         {measurePoints.length >= 2 && <Polyline positions={measurePoints.map((point) => [point.lat, point.lng])} pathOptions={{ color: '#ef4444', weight: 3, dashArray: '8 7' }} />}
         {measurePoints.length >= 3 && <Polygon positions={measurePoints.map((point) => [point.lat, point.lng])} pathOptions={{ color: '#ef4444', weight: 2, fillColor: '#ef4444', fillOpacity: 0.08, dashArray: '8 7' }} />}
@@ -942,8 +976,8 @@ export default function MapWorkspace({
       {displaySettings.mapActions && (
         <div className="smart-map-tools">
           <button type="button" className={`smart-map-action tone-cyan${addMode ? ' is-active' : ''}`} onClick={() => { if (measureMode) setMeasureMode(false); onToggleAddMode() }} aria-label={addMode ? 'Poligon noktası ekleme açık' : 'Haritaya poligon noktası ekle'} aria-pressed={addMode} title={addMode ? 'Poligon Noktası Açık' : 'Tıkla ve Ekle'}><span className="smart-map-action-icon"><MousePointer2 size={20} /></span><span className="smart-map-action-label">{addMode ? 'Poligon Açık' : 'Tıkla & Ekle'}</span></button>
-          <button type="button" className={`smart-map-action tone-amber${standaloneAddMode ? ' is-active' : ''}`} onClick={() => { if (measureMode) setMeasureMode(false); onToggleStandaloneAddMode() }} aria-label={standaloneAddMode ? 'Bağımsız nokta ekleme açık' : 'Bağımsız nokta ekle'} aria-pressed={standaloneAddMode} title={standaloneAddMode ? 'Bağımsız Nokta Açık' : 'Bağımsız Nokta'}><span className="smart-map-action-icon"><MapPin size={20} /></span><span className="smart-map-action-label">{standaloneAddMode ? 'Bağımsız Açık' : 'Bağımsız Nokta'}</span></button>
-          <button type="button" className="smart-map-action tone-violet" onClick={addTargetPoint} aria-label={standaloneAddMode ? 'Hedef merkezinden bağımsız nokta ekle' : 'Hedef merkezinden poligon noktası ekle'} title="Hedeften Ekle"><span className="smart-map-action-icon"><Crosshair size={20} /></span><span className="smart-map-action-label">Hedeften Ekle</span></button>
+          <button type="button" className={`smart-map-action tone-amber${standaloneAddMode ? ' is-active' : ''}`} onClick={() => { if (measureMode) setMeasureMode(false); onToggleStandaloneAddMode() }} aria-label={standaloneAddMode ? 'Nokta ekleme açık' : 'Nokta ekle'} aria-pressed={standaloneAddMode} title={standaloneAddMode ? 'Nokta Açık' : 'Nokta'}><span className="smart-map-action-icon"><MapPin size={20} /></span><span className="smart-map-action-label">{standaloneAddMode ? 'Nokta Açık' : 'Nokta'}</span></button>
+          <button type="button" className="smart-map-action tone-violet" onClick={addTargetPoint} aria-label={standaloneAddMode ? 'Hedef merkezinden nokta ekle' : 'Hedef merkezinden poligon noktası ekle'} title="Hedeften Ekle"><span className="smart-map-action-icon"><Crosshair size={20} /></span><span className="smart-map-action-label">Hedeften Ekle</span></button>
           <button type="button" className={`smart-map-action tone-rose${measureMode ? ' is-measuring' : ''}`} onClick={toggleMeasurement} aria-label={measureMode ? 'Serbest ölçüm açık' : 'Serbest ölçümü başlat'} aria-pressed={measureMode} title={measureMode ? 'Ölçüm Açık' : 'Serbest Ölç'}><span className="smart-map-action-icon"><Ruler size={20} /></span><span className="smart-map-action-label">{measureMode ? 'Ölçüm Açık' : 'Serbest Ölç'}</span></button>
         </div>
       )}

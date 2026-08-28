@@ -72,7 +72,7 @@ function readStandalonePoints(): GeoPoint[] {
         id: typeof point.id === 'string' ? point.id : `standalone-${index}`,
         lat: Number(point.lat),
         lng: Number(point.lng),
-        name: typeof point.name === 'string' ? point.name : undefined,
+        name: typeof point.name === 'string' ? point.name : `Nokta ${index + 1}`,
       }))
   } catch {
     return []
@@ -343,7 +343,14 @@ export default function App() {
           setStandaloneAddMode((value) => !value)
         }}
         onAddPoint={(point) => addPoints([point], false)}
-        onAddStandalonePoint={(point) => setStandalonePoints((current) => [...current, { ...point, id: uid('standalone') }])}
+        onAddStandalonePoint={(point) => setStandalonePoints((current) => {
+          const nextNumber = current.reduce((maximum, currentPoint) => {
+            const match = /^Nokta (\d+)$/.exec(currentPoint.name?.trim() || '')
+            return match ? Math.max(maximum, Number(match[1])) : maximum
+          }, 0) + 1
+          return [...current, { ...point, id: uid('standalone'), name: `Nokta ${nextNumber}` }]
+        })}
+        onRenameStandalonePoint={(pointId, name) => setStandalonePoints((current) => current.map((point) => point.id === pointId ? { ...point, name: name.slice(0, 80) } : point))}
         onDeleteStandalonePoint={(pointId) => setStandalonePoints((current) => current.filter((point) => point.id !== pointId))}
         onUpdatePoint={updatePoint}
         onLocate={(point) => setFlyTarget({ ...point, zoom: 17 })}

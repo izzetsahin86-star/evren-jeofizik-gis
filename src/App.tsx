@@ -10,6 +10,7 @@ import { DEFAULT_POLYGON_APPEARANCE, POLYGON_COLORS, analyzePolygon, formatAreaS
 import type { BaseLayerId, DisplaySettings, GeoPoint, PerformanceMode, PolygonAppearance, PolygonLayer } from './types'
 
 const WORKSPACE_KEY = 'evren-jeofizik-gis-workspace-v1'
+const STANDALONE_POINTS_KEY = 'evren-jeofizik-gis-standalone-points-v1'
 const LEGACY_PROJECTS_KEY = 'evren-jeofizik-gis-projects-v1'
 const PERFORMANCE_KEY = 'evren-jeofizik-gis-performance-v1'
 const DISPLAY_KEY = 'evren-jeofizik-gis-display-v2'
@@ -61,6 +62,23 @@ function readWorkspace() {
   return [createPolygon()]
 }
 
+function readStandalonePoints(): GeoPoint[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(STANDALONE_POINTS_KEY) || '[]') as Partial<GeoPoint>[]
+    if (!Array.isArray(value)) return []
+    return value
+      .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
+      .map((point, index) => ({
+        id: typeof point.id === 'string' ? point.id : `standalone-${index}`,
+        lat: Number(point.lat),
+        lng: Number(point.lng),
+        name: typeof point.name === 'string' ? point.name : undefined,
+      }))
+  } catch {
+    return []
+  }
+}
+
 function readDisplaySettings(): DisplaySettings {
   try {
     const stored = localStorage.getItem(DISPLAY_KEY) || localStorage.getItem(LEGACY_DISPLAY_KEY) || '{}'
@@ -89,12 +107,14 @@ function clonePolygons(polygons: PolygonLayer[]) {
 
 export default function App() {
   const [polygons, setPolygonsState] = useState<PolygonLayer[]>(readWorkspace)
+  const [standalonePoints, setStandalonePoints] = useState<GeoPoint[]>(readStandalonePoints)
   const [activeId, setActiveId] = useState(() => polygons[0].id)
   const [baseLayer, setBaseLayer] = useState<BaseLayerId>('street')
   const [mtaIndex25Visible, setMtaIndex25Visible] = useState(() => localStorage.getItem(MTA_INDEX_25_KEY) === '1')
   const [mtaIndex100Visible, setMtaIndex100Visible] = useState(() => localStorage.getItem(MTA_INDEX_100_KEY) === '1')
   const [activePanel, setActivePanel] = useState<DockPanelId | null>(null)
   const [addMode, setAddMode] = useState(false)
+  const [standaloneAddMode, setStandaloneAddMode] = useState(false)
   const [fitRequest, setFitRequest] = useState(0)
   const [flyTarget, setFlyTarget] = useState<{ lat: number; lng: number; zoom?: number } | null>(null)
   const [performanceMode, setPerformanceMode] = useState<PerformanceMode>(() => {
@@ -109,7 +129,8 @@ export default function App() {
   const redoStack = useRef<PolygonLayer[][]>([])
 
   const active = polygons.find((layer) => layer.id === activeId) ?? polygons[0]
-  const totalPoints = polygons.reduce((sum, layer) => sum + layer.points.length, 0)
+  const polygonPointCount = polygons.reduce((sum, layer) => sum + layer.points.length, 0)
+  const totalPoints = polygonPointCount + standalonePoints.length
   const totalDesPoints = polygons.reduce((sum, layer) => sum + layer.desPoints.length, 0)
   const performanceActive = performanceMode === 'on' || (performanceMode === 'auto' && (totalPoints > 350 || totalDesPoints > 1200))
   const activeAnalysis = useMemo(() => analyzePolygon(active?.points ?? []), [active])
@@ -117,6 +138,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(WORKSPACE_KEY, JSON.stringify(polygons))
   }, [polygons])
+
+  useEffect(() => {
+    localStorage.setItem(STANDALONE_POINTS_KEY, JSON.stringify(standalonePoints))
+  }, [standalonePoints])
 
   useEffect(() => {
     localStorage.setItem(PERFORMANCE_KEY, performanceMode)
@@ -248,6 +273,7 @@ export default function App() {
   const resetWorkspace = () => {
     setActivePanel(null)
     setAddMode(false)
+    setStandaloneAddMode(false)
     setBaseLayer('street')
     setMtaIndex25Visible(false)
     setMtaIndex100Visible(false)
@@ -258,10 +284,13 @@ export default function App() {
   const clearAllData = () => {
     const blank = createPolygon()
     localStorage.removeItem(WORKSPACE_KEY)
+    localStorage.removeItem(STANDALONE_POINTS_KEY)
     localStorage.removeItem(LEGACY_PROJECTS_KEY)
     setPolygonsState([blank])
+    setStandalonePoints([])
     setActiveId(blank.id)
     setAddMode(false)
+    setStandaloneAddMode(false)
     setFlyTarget(null)
     undoStack.current = []
     redoStack.current = []
@@ -292,19 +321,30 @@ export default function App() {
 
       <MapWorkspace
         polygons={polygons}
+        standalonePoints={standalonePoints}
         activeId={activeId}
         baseLayer={baseLayer}
         mtaIndex25Visible={mtaIndex25Visible}
         mtaIndex100Visible={mtaIndex100Visible}
         addMode={addMode}
+        standaloneAddMode={standaloneAddMode}
         panelOpen={Boolean(activePanel)}
         performanceMode={performanceActive}
         displaySettings={displaySettings}
         clearRequest={clearRequest}
         fitRequest={fitRequest}
         flyTarget={flyTarget}
-        onToggleAddMode={() => setAddMode((value) => !value)}
+        onToggleAddMode={() => {
+          setStandaloneAddMode(false)
+          setAddMode((value) => !value)
+        }}
+        onToggleStandaloneAddMode={() => {
+          setAddMode(false)
+          setStandaloneAddMode((value) => !value)
+        }}
         onAddPoint={(point) => addPoints([point], false)}
+        onAddStandalonePoint={(point) => setStandalonePoints((current) => [...current, { ...point, id: uid('standalone') }])}
+        onDeleteStandalonePoint={(pointId) => setStandalonePoints((current) => current.filter((point) => point.id !== pointId))}
         onUpdatePoint={updatePoint}
         onLocate={(point) => setFlyTarget({ ...point, zoom: 17 })}
         onMessage={message}

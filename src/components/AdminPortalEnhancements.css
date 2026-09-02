@@ -1,3 +1,7 @@
+.admin-login-heading p { display: none; }
+.admin-login-note span { font-size: 0; }
+.admin-login-note span::after { content: 'Oturum 15 dakika sonra otomatik kapanır. Üç hatalı deneme 15 dakika kilit uygular.'; font-size: 9px; }
+
 .admin-gps-cell { display: grid; justify-items: start; gap: 5px; }
 .admin-map-link { min-height: 25px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: 1px solid #bfe3d5; border-radius: 8px; color: #087d57; background: #f0fbf7; font-size: 7.5px; font-weight: 850; cursor: pointer; white-space: nowrap; }
 .admin-map-link:hover { background: #e3f7ef; }

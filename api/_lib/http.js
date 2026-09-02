@@ -15,12 +15,19 @@ export function allowMethods(req, res, methods) {
 export function isSameOrigin(req) {
   const fetchSite = String(req.headers['sec-fetch-site'] || '').toLowerCase()
   if (fetchSite === 'cross-site') return false
+  if (fetchSite === 'same-origin') return true
 
   const origin = req.headers.origin
   if (!origin) return true
-  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim()
+
+  const hosts = [req.headers['x-forwarded-host'], req.headers.host]
+    .flatMap((value) => String(value || '').split(','))
+    .map((value) => value.trim())
+    .filter(Boolean)
+
   try {
-    return new URL(String(origin)).host === host
+    const originHost = new URL(String(origin)).host
+    return hosts.includes(originHost)
   } catch {
     return false
   }

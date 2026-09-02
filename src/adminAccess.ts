@@ -34,6 +34,7 @@ export const DEFAULT_ADMIN_ACCESS_CONFIG: AdminAccessConfig = {
 const CONFIG_CACHE_KEY = 'evren-jeofizik-admin-access-config-v1'
 const SEQUENCE_TIMEOUT_MS = 8_000
 let activeConfig: AdminAccessConfig = structuredClone(DEFAULT_ADMIN_ACCESS_CONFIG)
+let coordinateSettingsRequested = false
 
 export type AdminAccessSequence = {
   step: number
@@ -41,6 +42,14 @@ export type AdminAccessSequence = {
 }
 
 export const EMPTY_ADMIN_SEQUENCE: AdminAccessSequence = { step: 0, startedAt: 0 }
+
+function ensureCoordinateSettingsMount() {
+  if (coordinateSettingsRequested || typeof window === 'undefined') return
+  coordinateSettingsRequested = true
+  void import('./adminCoordinateMount')
+    .then(({ installAdminCoordinateSettings }) => installAdminCoordinateSettings())
+    .catch(() => { coordinateSettingsRequested = false })
+}
 
 function normalizeConfig(value: unknown): AdminAccessConfig | null {
   if (!value || typeof value !== 'object') return null
@@ -115,6 +124,7 @@ if (typeof window !== 'undefined') {
     // Geçersiz yerel kayıt varsayılan ayarları etkilemez.
   }
   void refreshAdminAccessConfig()
+  if (window.location.pathname.replace(/\/+$/, '') === '/admin') ensureCoordinateSettingsMount()
 }
 
 function adminTargetId(point: Pick<GeoPoint, 'lat' | 'lng'>) {
@@ -139,7 +149,10 @@ export function advanceAdminAccess(
   if (targetId === null) return { state: EMPTY_ADMIN_SEQUENCE, complete: false }
   if (targetId === sequence[state.step]) {
     const nextStep = state.step + 1
-    if (nextStep === sequence.length) return { state: EMPTY_ADMIN_SEQUENCE, complete: true }
+    if (nextStep === sequence.length) {
+      ensureCoordinateSettingsMount()
+      return { state: EMPTY_ADMIN_SEQUENCE, complete: true }
+    }
     return {
       state: { step: nextStep, startedAt: state.step === 0 ? now : state.startedAt },
       complete: false,

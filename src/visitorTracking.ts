@@ -1,4 +1,5 @@
 const VISITOR_KEY = 'evren-jeofizik-anonymous-visitor-v1'
+const GEO_CAPTURE_FLAG = '__evrenGrantedLocationCaptureV1'
 
 type VisitSession = {
   visitId: string
@@ -7,9 +8,17 @@ type VisitSession = {
   day: string
 }
 
+type GrantedLocation = {
+  latitude: number
+  longitude: number
+  accuracy: number
+}
+
 let currentSession: VisitSession | null = null
 let startPromise: Promise<VisitSession | null> | null = null
 let lifecycleInstalled = false
+let gpsRecordedVisitId: string | null = null
+let gpsRecordingPromise: Promise<void> | null = null
 
 function randomId() {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
@@ -32,6 +41,10 @@ function visitorId() {
   }
 }
 
+function delay(milliseconds: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds))
+}
+
 async function post(path: string, body: object, keepalive = false) {
   const response = await fetch(path, {
     method: 'POST',
@@ -42,6 +55,19 @@ async function post(path: string, body: object, keepalive = false) {
   })
   if (!response.ok) return null
   return response.json().catch(() => null)
+}
+
+async function postWithRetry(path: string, body: object, attempts = 3, keepalive = false) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const payload = await post(path, body, keepalive)
+      if (payload) return payload
+    } catch {
+      // Geçici ağ / fonksiyon hatasında kısa süre sonra yeniden dene.
+    }
+    if (attempt < attempts - 1) await delay(500 * (attempt + 1))
+  }
+  return null
 }
 
 function sessionPayload(session: VisitSession) {
@@ -75,8 +101,9 @@ function installLifecycle() {
 }
 
 export function startVisitorTracking() {
+  if (currentSession) return Promise.resolve(currentSession)
   if (startPromise) return startPromise
-  startPromise = post('/api/visits/start', {
+  startPromise = postWithRetry('/api/visits/start', {
     visitorId: visitorId(),
     page: window.location.pathname,
     referrer: document.referrer,
@@ -107,13 +134,78 @@ export function startVisitorTracking() {
   return startPromise
 }
 
-export async function recordGrantedLocation(location: { latitude: number; longitude: number; accuracy: number }) {
+export async function recordGrantedLocation(location: GrantedLocation) {
   const session = currentSession || await startVisitorTracking()
-  if (!session) return
-  await post('/api/visits/location', {
-    ...sessionPayload(session),
-    latitude: location.latitude,
-    longitude: location.longitude,
-    accuracy: location.accuracy,
-  }).catch(() => undefined)
+  if (!session || gpsRecordedVisitId === session.visitId) return
+
+  if (gpsRecordingPromise) {
+    await gpsRecordingPromise
+    if (gpsRecordedVisitId === session.visitId) return
+  }
+
+  const task = (async () => {
+    const payload = await postWithRetry('/api/visits/location', {
+      ...sessionPayload(session),
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracy: location.accuracy,
+    }, 3)
+    if (payload?.ok && payload.updated !== false) gpsRecordedVisitId = session.visitId
+  })()
+
+  gpsRecordingPromise = task
+  try {
+    await task
+  } finally {
+    if (gpsRecordingPromise === task) gpsRecordingPromise = null
+  }
 }
+
+function installGeolocationCapture() {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) return
+  const geolocation = navigator.geolocation as Geolocation & { __evrenGrantedLocationCaptureV1?: boolean }
+  if (geolocation[GEO_CAPTURE_FLAG as '__evrenGrantedLocationCaptureV1']) return
+
+  const originalGetCurrentPosition = geolocation.getCurrentPosition.bind(geolocation)
+  const originalWatchPosition = geolocation.watchPosition.bind(geolocation)
+  const capture = (position: GeolocationPosition) => {
+    void recordGrantedLocation({
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy,
+    })
+  }
+
+  try {
+    Object.defineProperty(geolocation, 'getCurrentPosition', {
+      configurable: true,
+      value: (
+        success: PositionCallback,
+        error?: PositionErrorCallback | null,
+        options?: PositionOptions,
+      ) => originalGetCurrentPosition((position) => {
+        capture(position)
+        success(position)
+      }, error ?? undefined, options),
+    })
+
+    Object.defineProperty(geolocation, 'watchPosition', {
+      configurable: true,
+      value: (
+        success: PositionCallback,
+        error?: PositionErrorCallback | null,
+        options?: PositionOptions,
+      ) => originalWatchPosition((position) => {
+        capture(position)
+        success(position)
+      }, error ?? undefined, options),
+    })
+
+    geolocation.__evrenGrantedLocationCaptureV1 = true
+  } catch {
+    // Bazı tarayıcılar Geolocation yöntemlerinin sarılmasına izin vermeyebilir.
+    // Mevcut doğrudan Konumum entegrasyonu bu durumda çalışmaya devam eder.
+  }
+}
+
+installGeolocationCapture()

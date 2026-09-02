@@ -1,0 +1,56 @@
+.admin-gps-cell { display: grid; justify-items: start; gap: 5px; }
+.admin-map-link { min-height: 25px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: 1px solid #bfe3d5; border-radius: 8px; color: #087d57; background: #f0fbf7; font-size: 7.5px; font-weight: 850; cursor: pointer; white-space: nowrap; }
+.admin-map-link:hover { background: #e3f7ef; }
+.admin-map-link:active { transform: scale(.97); }
+
+.admin-visit-table.is-selectable { min-width: 960px; }
+.admin-visit-table.is-selectable th:nth-child(1) { width: 44px; padding-left: 10px; padding-right: 6px; }
+.admin-visit-table.is-selectable th:nth-child(2) { width: 145px; }
+.admin-visit-table.is-selectable th:nth-child(3) { width: 170px; }
+.admin-visit-table.is-selectable th:nth-child(4) { width: 130px; }
+.admin-visit-table.is-selectable th:nth-child(5) { width: 160px; }
+.admin-visit-table.is-selectable th:nth-child(6) { width: 155px; }
+.admin-visit-table.is-selectable th:nth-child(7) { width: 95px; }
+.admin-visit-table.is-selectable th:nth-child(8) { width: 80px; }
+.admin-select-column { width: 44px !important; text-align: center !important; }
+.admin-check-button { width: 30px; height: 30px; display: inline-grid; place-items: center; border: 0; border-radius: 9px; color: #7690a5; background: transparent; cursor: pointer; }
+.admin-check-button:hover { color: #2583dd; background: #edf7fd; }
+.admin-visit-table tr.is-selected td { background: #f1f8fd; }
+.admin-visit-table tr.is-selected td:first-child { box-shadow: inset 3px 0 0 #2583dd; }
+.admin-visit-table tr.is-selected .admin-check-button { color: #2583dd; }
+
+.admin-selection-toolbar { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 14px; border-bottom: 1px solid #e7edf2; background: linear-gradient(180deg,#fbfdff,#f5f9fc); }
+.admin-selection-toolbar > div:first-child { display: flex; align-items: center; gap: 8px; color: #567084; font-size: 9px; }
+.admin-selection-toolbar > div:first-child svg { color: #2583dd; }
+.admin-selection-toolbar > div:first-child strong { color: #1f6fa7; font-size: 11px; }
+.admin-selection-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 7px; }
+.admin-selection-actions button { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 11px; border-radius: 10px; font-size: 8px; font-weight: 850; cursor: pointer; }
+.admin-selection-actions button:disabled { opacity: .42; cursor: not-allowed; }
+.admin-delete-selected { border: 1px solid #f2d3d7; color: #b4424f; background: #fff7f8; }
+.admin-delete-selected:not(:disabled):hover { background: #ffedef; }
+.admin-delete-all { border: 1px solid #efb8be; color: #fff; background: linear-gradient(135deg,#d84c5a,#b93645); box-shadow: 0 6px 14px rgba(185,54,69,.16); }
+.admin-delete-all:not(:disabled):hover { filter: brightness(.97); }
+
+.admin-confirm-overlay { position: fixed; inset: 0; z-index: 5300; display: grid; place-items: center; padding: 20px; background: rgba(5,13,25,.58); backdrop-filter: blur(8px); }
+.admin-confirm-card { width: min(430px,calc(100vw - 28px)); display: grid; gap: 16px; padding: 24px; border: 1px solid rgba(255,255,255,.7); border-radius: 23px; background: #fff; box-shadow: 0 30px 80px rgba(2,8,23,.38); animation: admin-confirm-in .18s ease-out both; }
+@keyframes admin-confirm-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+.admin-confirm-icon { width: 50px; height: 50px; display: grid; place-items: center; border-radius: 16px; color: #c23e4c; background: #fff0f2; }
+.admin-confirm-card h2 { margin: 0 0 6px; color: #253247; font-size: 17px; letter-spacing: -.02em; }
+.admin-confirm-card p { margin: 0; color: #728096; font-size: 10px; line-height: 1.5; }
+.admin-confirm-actions { display: grid; grid-template-columns: 1fr 1.25fr; gap: 8px; }
+.admin-confirm-actions button { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: 12px; font-size: 9px; font-weight: 850; cursor: pointer; }
+.admin-confirm-actions button:disabled { opacity: .55; cursor: not-allowed; }
+.admin-cancel-button { border: 1px solid #d9e1e8; color: #59697a; background: #f8fafc; }
+.admin-danger-button { border: 0; color: #fff; background: linear-gradient(135deg,#dc5260,#b93847); box-shadow: 0 8px 18px rgba(185,56,71,.22); }
+
+@media (max-width: 760px) {
+  .admin-selection-toolbar { align-items: stretch; flex-direction: column; }
+  .admin-selection-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .admin-selection-actions button { min-height: 38px; }
+  .admin-map-link { min-height: 28px; }
+}
+
+@media (max-width: 520px) {
+  .admin-selection-actions { grid-template-columns: 1fr; }
+  .admin-confirm-actions { grid-template-columns: 1fr; }
+}

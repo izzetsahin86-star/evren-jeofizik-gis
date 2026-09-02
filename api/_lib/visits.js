@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { clientIp, decodeHeader, finiteNumber, limitedText } from './http.js'
-import { listPrivate, mutatePrivateJson, readPrivateJson, writePrivateJson } from './storage.js'
+import { deletePrivate, listPrivate, mutatePrivateJson, readPrivateJson, writePrivateJson } from './storage.js'
 
 const LEGACY_VISIT_PREFIX = 'evren-admin/visits/'
 const VISIT_PREFIX = 'evren-admin/visits-v2/'
@@ -258,4 +258,58 @@ export async function listVisits(days = 90) {
     ...visit,
     visitorVisitCount: counts.get(visit.visitorId) || 1,
   }))
+}
+
+async function deletePaths(pathnames) {
+  for (let index = 0; index < pathnames.length; index += 12) {
+    await Promise.all(pathnames.slice(index, index + 12).map((pathname) => deletePrivate(pathname)))
+  }
+}
+
+export async function deleteVisitsByIds(ids) {
+  const wanted = new Set((Array.isArray(ids) ? ids : [])
+    .map((id) => String(id || ''))
+    .filter((id) => ID_PATTERN.test(id))
+    .slice(0, 500))
+  if (!wanted.size) return { deleted: 0 }
+
+  const [standaloneBlobs, legacyBlobs] = await Promise.all([
+    listPrivate(VISIT_PREFIX),
+    listPrivate(LEGACY_VISIT_PREFIX),
+  ])
+
+  const standalonePaths = standaloneBlobs.flatMap((blob) => {
+    const match = VISIT_PATH_PATTERN.exec(blob.pathname)
+    return match && wanted.has(match[2]) ? [blob.pathname] : []
+  })
+  await deletePaths(standalonePaths)
+
+  let legacyDeleted = 0
+  for (const blob of legacyBlobs) {
+    if (!LEGACY_PATH_PATTERN.test(blob.pathname)) continue
+    await mutatePrivateJson(blob.pathname, null, (document) => {
+      if (!document || !Array.isArray(document.visits)) return document
+      const nextVisits = document.visits.filter((visit) => {
+        const remove = wanted.has(String(visit?.id || ''))
+        if (remove) legacyDeleted += 1
+        return !remove
+      })
+      return nextVisits.length === document.visits.length ? document : { ...document, visits: nextVisits }
+    })
+  }
+
+  return { deleted: standalonePaths.length + legacyDeleted }
+}
+
+export async function deleteAllVisits() {
+  const [standaloneBlobs, legacyBlobs] = await Promise.all([
+    listPrivate(VISIT_PREFIX),
+    listPrivate(LEGACY_VISIT_PREFIX),
+  ])
+  const paths = [
+    ...standaloneBlobs.filter((blob) => VISIT_PATH_PATTERN.test(blob.pathname)).map((blob) => blob.pathname),
+    ...legacyBlobs.filter((blob) => LEGACY_PATH_PATTERN.test(blob.pathname)).map((blob) => blob.pathname),
+  ]
+  await deletePaths(paths)
+  return { deletedFiles: paths.length }
 }

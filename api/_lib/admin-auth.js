@@ -6,8 +6,8 @@ const COOKIE_NAME = 'evren_admin_session'
 const SESSION_SECONDS = 8 * 60 * 60
 const INITIAL_PASSWORD = {
   version: 1,
-  salt: '85135c8647737c3a5d6144f997550c13',
-  hash: '5fadf62ee35479aaff2d0bead0f4640f863ff178cc1917736eea082af5e453fc8e643cab01ee7abed015f17360bd98b88fc113afd25fc77c2dbea5e3a1e0d397',
+  salt: 'd168d2aeed81ecf59541db5da818f947',
+  hash: 'ad77c2fc5e277990a6d1f19edcfe5fba87764424ce94b58c5740ef86e1661d62206ac368d161c39ebc8dbe81003d72e79f311ea74165dcf37214f2c38c0fcad9',
   updatedAt: null,
 }
 const PASSWORD_PATH = 'evren-admin/config/password.json'

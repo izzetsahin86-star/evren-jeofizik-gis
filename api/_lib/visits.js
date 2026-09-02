@@ -1,10 +1,14 @@
 import crypto from 'node:crypto'
 import { clientIp, decodeHeader, finiteNumber, limitedText } from './http.js'
-import { listPrivate, mutatePrivateJson, readPrivateJson } from './storage.js'
+import { listPrivate, mutatePrivateJson, readPrivateJson, writePrivateJson } from './storage.js'
 
-const VISIT_PREFIX = 'evren-admin/visits/'
+const LEGACY_VISIT_PREFIX = 'evren-admin/visits/'
+const VISIT_PREFIX = 'evren-admin/visits-v2/'
+const RATE_PREFIX = 'evren-admin/visit-rate/'
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const ID_PATTERN = /^[0-9a-f-]{36}$/i
+const LEGACY_PATH_PATTERN = /^evren-admin\/visits\/(\d{4}-\d{2}-\d{2})\.json$/
+const VISIT_PATH_PATTERN = /^evren-admin\/visits-v2\/(\d{4}-\d{2}-\d{2})\/([0-9a-f-]{36})\.json$/i
 
 export class VisitRateLimitError extends Error {
   constructor() {
@@ -13,9 +17,18 @@ export class VisitRateLimitError extends Error {
   }
 }
 
-function dayPath(day) {
+function legacyDayPath(day) {
   if (!DAY_PATTERN.test(day)) throw new Error('Geçersiz ziyaret günü.')
-  return `${VISIT_PREFIX}${day}.json`
+  return `${LEGACY_VISIT_PREFIX}${day}.json`
+}
+
+function visitPath(day, visitId) {
+  if (!DAY_PATTERN.test(day) || !ID_PATTERN.test(visitId)) throw new Error('Geçersiz ziyaret kimliği.')
+  return `${VISIT_PREFIX}${day}/${visitId}.json`
+}
+
+function ratePath(ip) {
+  return `${RATE_PREFIX}${crypto.createHash('sha256').update(ip || 'unknown').digest('hex')}.json`
 }
 
 function todayUtc() {
@@ -59,12 +72,38 @@ function clientDetails(body, req) {
   }
 }
 
+async function enforceVisitRateLimit(ip) {
+  const now = Date.now()
+  const oneHour = 60 * 60 * 1000
+  try {
+    await mutatePrivateJson(ratePath(ip), {
+      windowStartedAt: now,
+      attempts: 0,
+      lastAttemptAt: now,
+    }, (document) => {
+      const windowStartedAt = Number(document?.windowStartedAt || 0)
+      const withinWindow = windowStartedAt > 0 && now - windowStartedAt < oneHour
+      const attempts = withinWindow ? Number(document?.attempts || 0) : 0
+      if (attempts >= 80) throw new VisitRateLimitError()
+      return {
+        windowStartedAt: withinWindow ? windowStartedAt : now,
+        attempts: attempts + 1,
+        lastAttemptAt: now,
+      }
+    })
+  } catch (error) {
+    if (error instanceof VisitRateLimitError) throw error
+    console.warn('Visitor rate-limit storage unavailable; continuing with visit write.', error)
+  }
+}
+
 export async function createVisit(req, body) {
   const visitId = crypto.randomUUID()
   const editToken = crypto.randomBytes(24).toString('base64url')
   const visitorId = ID_PATTERN.test(String(body?.visitorId || '')) ? String(body.visitorId) : crypto.randomUUID()
   const startedAt = new Date().toISOString()
   const day = startedAt.slice(0, 10)
+  const ip = limitedText(clientIp(req), 80)
   const visit = {
     id: visitId,
     visitorId,
@@ -73,32 +112,33 @@ export async function createVisit(req, body) {
     lastSeenAt: startedAt,
     endedAt: null,
     durationSeconds: 0,
-    ip: limitedText(clientIp(req), 80),
+    ip,
     approximateLocation: approximateLocation(req),
     gps: null,
     ...clientDetails(body, req),
   }
 
-  await mutatePrivateJson(dayPath(day), { version: 1, day, visits: [] }, (document) => {
-    const visits = Array.isArray(document.visits) ? document.visits : []
-    const oneHourAgo = Date.now() - 60 * 60 * 1000
-    const recentFromIp = visits.filter((item) => item.ip === visit.ip && new Date(item.startedAt).getTime() >= oneHourAgo).length
-    if (recentFromIp >= 80) throw new VisitRateLimitError()
-    return { version: 1, day, visits: [...visits, visit] }
-  })
+  await enforceVisitRateLimit(ip)
+  await writePrivateJson(visitPath(day, visitId), visit, { allowOverwrite: false })
 
   return { visitId, visitorId, editToken, day }
 }
 
-export async function updateVisit(body, updater) {
-  const day = limitedText(body?.day, 10)
-  const visitId = limitedText(body?.visitId, 40)
-  const editToken = limitedText(body?.editToken, 100)
-  if (!DAY_PATTERN.test(day) || !ID_PATTERN.test(visitId) || !editToken) return false
-
+async function updateStandaloneVisit(day, visitId, editToken, updater) {
   let updated = false
-  await mutatePrivateJson(dayPath(day), { version: 1, day, visits: [] }, (document) => {
-    const visits = Array.isArray(document.visits) ? document.visits : []
+  await mutatePrivateJson(visitPath(day, visitId), null, (visit) => {
+    if (!visit || typeof visit !== 'object') return visit
+    if (visit.id !== visitId || !secureTokenMatches(editToken, visit.editTokenHash)) return visit
+    updated = true
+    return updater(visit)
+  })
+  return updated
+}
+
+async function updateLegacyVisit(day, visitId, editToken, updater) {
+  let updated = false
+  await mutatePrivateJson(legacyDayPath(day), { version: 1, day, visits: [] }, (document) => {
+    const visits = Array.isArray(document?.visits) ? document.visits : []
     let matched = false
     const nextVisits = visits.map((visit) => {
       if (visit.id !== visitId || !secureTokenMatches(editToken, visit.editTokenHash)) return visit
@@ -109,6 +149,16 @@ export async function updateVisit(body, updater) {
     return matched ? { ...document, visits: nextVisits } : document
   })
   return updated
+}
+
+export async function updateVisit(body, updater) {
+  const day = limitedText(body?.day, 10)
+  const visitId = limitedText(body?.visitId, 40)
+  const editToken = limitedText(body?.editToken, 100)
+  if (!DAY_PATTERN.test(day) || !ID_PATTERN.test(visitId) || !editToken) return false
+
+  if (await updateStandaloneVisit(day, visitId, editToken, updater)) return true
+  return updateLegacyVisit(day, visitId, editToken, updater)
 }
 
 export function gpsUpdate(body) {
@@ -141,8 +191,8 @@ export function activityUpdate(visit, ended) {
 
 async function readDocuments(blobs) {
   const documents = []
-  for (let index = 0; index < blobs.length; index += 8) {
-    const batch = blobs.slice(index, index + 8)
+  for (let index = 0; index < blobs.length; index += 12) {
+    const batch = blobs.slice(index, index + 12)
     const results = await Promise.allSettled(batch.map((blob) => readPrivateJson(blob.pathname)))
     results.forEach((result) => {
       if (result.status === 'fulfilled' && result.value?.data) documents.push(result.value.data)
@@ -151,22 +201,54 @@ async function readDocuments(blobs) {
   return documents
 }
 
+function inSelectedPeriod(day, cutoffDay) {
+  return DAY_PATTERN.test(day) && day >= cutoffDay && day <= todayUtc()
+}
+
 export async function listVisits(days = 90) {
   const safeDays = Math.max(1, Math.min(180, Math.round(Number(days) || 90)))
   const cutoff = new Date()
   cutoff.setUTCDate(cutoff.getUTCDate() - safeDays + 1)
   const cutoffDay = cutoff.toISOString().slice(0, 10)
-  const blobs = (await listPrivate(VISIT_PREFIX))
+
+  const [standaloneBlobs, legacyBlobs] = await Promise.all([
+    listPrivate(VISIT_PREFIX),
+    listPrivate(LEGACY_VISIT_PREFIX),
+  ])
+
+  const selectedStandalone = standaloneBlobs
     .filter((blob) => {
-      const day = blob.pathname.slice(VISIT_PREFIX.length, -5)
-      return DAY_PATTERN.test(day) && day >= cutoffDay && day <= todayUtc()
+      const match = VISIT_PATH_PATTERN.exec(blob.pathname)
+      return Boolean(match && inSelectedPeriod(match[1], cutoffDay))
     })
     .sort((a, b) => b.pathname.localeCompare(a.pathname))
 
-  const documents = await readDocuments(blobs)
-  const visits = documents
-    .flatMap((document) => Array.isArray(document.visits) ? document.visits : [])
-    .filter((visit) => visit && typeof visit === 'object')
+  const selectedLegacy = legacyBlobs
+    .filter((blob) => {
+      const match = LEGACY_PATH_PATTERN.exec(blob.pathname)
+      return Boolean(match && inSelectedPeriod(match[1], cutoffDay))
+    })
+    .sort((a, b) => b.pathname.localeCompare(a.pathname))
+
+  const [standaloneDocuments, legacyDocuments] = await Promise.all([
+    readDocuments(selectedStandalone),
+    readDocuments(selectedLegacy),
+  ])
+
+  const combined = [
+    ...standaloneDocuments.filter((visit) => visit && typeof visit === 'object' && ID_PATTERN.test(String(visit.id || ''))),
+    ...legacyDocuments.flatMap((document) => Array.isArray(document?.visits) ? document.visits : []),
+  ]
+
+  const unique = new Map()
+  combined.forEach((visit) => {
+    if (!visit || typeof visit !== 'object') return
+    const id = String(visit.id || '')
+    if (!ID_PATTERN.test(id)) return
+    if (!unique.has(id)) unique.set(id, visit)
+  })
+
+  const visits = Array.from(unique.values())
     .sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))
     .slice(0, 1500)
 

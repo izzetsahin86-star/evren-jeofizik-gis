@@ -3,7 +3,10 @@ import { clientIp } from './http.js'
 import { deletePrivate, readPrivateJson, writePrivateJson } from './storage.js'
 
 const COOKIE_NAME = 'evren_admin_session'
-const SESSION_SECONDS = 8 * 60 * 60
+const SESSION_SECONDS = 15 * 60
+export const MAX_LOGIN_ATTEMPTS = 3
+const LOGIN_WINDOW_MS = 15 * 60 * 1000
+const LOGIN_BLOCK_MS = 15 * 60 * 1000
 const INITIAL_PASSWORD = {
   version: 1,
   salt: 'd168d2aeed81ecf59541db5da818f947',
@@ -86,7 +89,11 @@ export async function hasAdminSession(req) {
   if (!token) return false
   try {
     const stored = await readPrivateJson(sessionPath(token))
-    return Number.isFinite(stored?.data?.expiresAt) && stored.data.expiresAt > Date.now()
+    const issuedAt = Number(stored?.data?.issuedAt)
+    const storedExpiresAt = Number(stored?.data?.expiresAt)
+    if (!Number.isFinite(issuedAt) || !Number.isFinite(storedExpiresAt)) return false
+    const effectiveExpiresAt = Math.min(storedExpiresAt, issuedAt + SESSION_SECONDS * 1000)
+    return effectiveExpiresAt > Date.now()
   } catch {
     return false
   }
@@ -127,19 +134,32 @@ export async function loginRateStatus(req) {
   const stored = await readPrivateJson(path)
   const data = stored?.data
   if (!data || typeof data !== 'object') return { blocked: false, attempts: 0, windowStartedAt: 0, path }
+
+  const now = Date.now()
   const blockedUntil = Number(data.blockedUntil || 0)
-  if (blockedUntil > Date.now()) {
-    return { blocked: true, attempts: Number(data.attempts || 0), windowStartedAt: Number(data.windowStartedAt || 0), retryAfter: Math.ceil((blockedUntil - Date.now()) / 1000), path }
+  if (blockedUntil > now) {
+    return { blocked: true, attempts: Number(data.attempts || 0), windowStartedAt: Number(data.windowStartedAt || 0), retryAfter: Math.ceil((blockedUntil - now) / 1000), path }
   }
+
   const windowStartedAt = Number(data.windowStartedAt || 0)
-  if (Date.now() - windowStartedAt > 15 * 60 * 1000) return { blocked: false, attempts: 0, windowStartedAt: 0, path }
-  return { blocked: false, attempts: Number(data.attempts || 0), windowStartedAt, path }
+  if (now - windowStartedAt > LOGIN_WINDOW_MS) return { blocked: false, attempts: 0, windowStartedAt: 0, path }
+
+  const attempts = Number(data.attempts || 0)
+  if (attempts >= MAX_LOGIN_ATTEMPTS) {
+    const lastAttemptAt = Number(data.lastAttemptAt || windowStartedAt || now)
+    const inferredBlockedUntil = lastAttemptAt + LOGIN_BLOCK_MS
+    if (inferredBlockedUntil > now) {
+      return { blocked: true, attempts, windowStartedAt, retryAfter: Math.ceil((inferredBlockedUntil - now) / 1000), path }
+    }
+  }
+
+  return { blocked: false, attempts, windowStartedAt, path }
 }
 
 export async function recordLoginFailure(req, status) {
   const attempts = status.attempts + 1
   const now = Date.now()
-  const blockedUntil = attempts >= 5 ? now + 15 * 60 * 1000 : 0
+  const blockedUntil = attempts >= MAX_LOGIN_ATTEMPTS ? now + LOGIN_BLOCK_MS : 0
   await writePrivateJson(status.path, {
     attempts,
     windowStartedAt: status.windowStartedAt || now,

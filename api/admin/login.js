@@ -1,4 +1,4 @@
-import { clearLoginFailures, createAdminSession, loginRateStatus, recordLoginFailure, setAdminCookie, verifyAdminPassword } from '../_lib/admin-auth.js'
+import { clearLoginFailures, createAdminSession, loginRateStatus, MAX_LOGIN_ATTEMPTS, recordLoginFailure, setAdminCookie, verifyAdminPassword } from '../_lib/admin-auth.js'
 import { allowMethods, isSameOrigin, readBody, sendJson } from '../_lib/http.js'
 import { storageErrorPayload } from '../_lib/storage.js'
 
@@ -18,7 +18,7 @@ export default async function handler(req, res) {
       return sendJson(res, 401, {
         ok: false,
         error: 'INVALID_PASSWORD',
-        attemptsRemaining: Math.max(0, 5 - failure.attempts),
+        attemptsRemaining: Math.max(0, MAX_LOGIN_ATTEMPTS - failure.attempts),
       })
     }
 

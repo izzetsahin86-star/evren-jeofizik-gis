@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'evren-gis-v38'
+const CACHE_VERSION = 'evren-gis-v39'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const TILE_CACHE = `${CACHE_VERSION}-tiles`
 const SHELL_FILES = ['/', '/index.html', '/offline.html', '/manifest.webmanifest', '/icons/evren-gis.svg', '/icons/evren-jeofizik-logo.svg', '/fonts/EvrenSans.ttf', '/fonts/EvrenSans-Bold.ttf']
@@ -37,6 +37,7 @@ self.addEventListener('fetch', (event) => {
   const request = event.request
   if (request.method !== 'GET') return
   const url = new URL(request.url)
+  if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) return
   const isTile = TILE_HOSTS.some((host) => url.hostname.endsWith(host))
 
   if (isTile) {

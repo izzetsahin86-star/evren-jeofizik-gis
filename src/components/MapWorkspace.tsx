@@ -496,6 +496,7 @@ const PolygonLayerView = memo(function PolygonLayerView({
   onUpdatePoint,
   onDeletePoint,
   onDeletePolygon,
+  onPointTap,
   onMessage,
 }: {
   layer: PolygonLayer
@@ -504,6 +505,7 @@ const PolygonLayerView = memo(function PolygonLayerView({
   onUpdatePoint: (pointId: string, point: Omit<GeoPoint, 'id'>) => void
   onDeletePoint: (polygonId: string, pointId: string) => void
   onDeletePolygon: (polygonId: string) => void
+  onPointTap: (point: Pick<GeoPoint, 'lat' | 'lng'>) => void
   onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
 }) {
   const [shareTarget, setShareTarget] = useState<
@@ -600,6 +602,7 @@ const PolygonLayerView = memo(function PolygonLayerView({
                 onUpdatePoint(point.id, { lat: location.lat, lng: location.lng })
               },
               click(event) {
+                onPointTap(point)
                 openShareOnSecondTap(`point-${point.id}`, { kind: 'point', position: [point.lat, point.lng], index }, event)
               },
               contextmenu(event) {
@@ -697,11 +700,13 @@ const StandalonePointLayer = memo(function StandalonePointLayer({
   points,
   onRenamePoint,
   onDeletePoint,
+  onPointTap,
   onMessage,
 }: {
   points: GeoPoint[]
   onRenamePoint: (pointId: string, name: string) => void
   onDeletePoint: (pointId: string) => void
+  onPointTap: (point: Pick<GeoPoint, 'lat' | 'lng'>) => void
   onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
 }) {
   const [sharePointId, setSharePointId] = useState<string | null>(null)
@@ -725,6 +730,7 @@ const StandalonePointLayer = memo(function StandalonePointLayer({
             bubblingMouseEvents={false}
             eventHandlers={{
               click(event) {
+                onPointTap(point)
                 event.originalEvent.preventDefault()
                 event.originalEvent.stopPropagation()
                 const timestamp = Date.now()
@@ -820,6 +826,8 @@ interface MapWorkspaceProps {
   onDeletePolygon: (polygonId: string) => void
   onUpdatePoint: (pointId: string, point: Omit<GeoPoint, 'id'>) => void
   onLocate: (point: Omit<GeoPoint, 'id'>) => void
+  onGrantedLocation: (location: { latitude: number; longitude: number; accuracy: number }) => void
+  onPointTap: (point: Pick<GeoPoint, 'lat' | 'lng'>) => void
   onMessage: (message: string, tone?: 'success' | 'error' | 'info') => void
 }
 
@@ -848,6 +856,8 @@ export default function MapWorkspace({
   onDeletePolygon,
   onUpdatePoint,
   onLocate,
+  onGrantedLocation,
+  onPointTap,
   onMessage,
 }: MapWorkspaceProps) {
   const mapRef = useRef<LeafletMap | null>(null)
@@ -1080,6 +1090,7 @@ export default function MapWorkspace({
       setGpsPosition(point)
       mapRef.current?.flyTo([point.lat, point.lng], 17, { duration: 0.8 })
       onLocate({ lat: point.lat, lng: point.lng })
+      onGrantedLocation({ latitude: point.lat, longitude: point.lng, accuracy: point.accuracy })
       onMessage(`Konum bulundu · yaklaşık ±${formatNumber(point.accuracy, 0)} m hassasiyet`, 'success')
     }, () => onMessage('Konum alınamadı. Cihazın konum iznini kontrol edin.', 'error'), {
       enableHighAccuracy: true,
@@ -1138,10 +1149,11 @@ export default function MapWorkspace({
             onUpdatePoint={onUpdatePoint}
             onDeletePoint={onDeletePolygonPoint}
             onDeletePolygon={onDeletePolygon}
+            onPointTap={onPointTap}
             onMessage={onMessage}
           />
         ))}
-        <StandalonePointLayer points={standalonePoints} onRenamePoint={onRenameStandalonePoint} onDeletePoint={onDeleteStandalonePoint} onMessage={onMessage} />
+        <StandalonePointLayer points={standalonePoints} onRenamePoint={onRenameStandalonePoint} onDeletePoint={onDeleteStandalonePoint} onPointTap={onPointTap} onMessage={onMessage} />
 
         {measurePoints.length >= 2 && <Polyline positions={measurePoints.map((point) => [point.lat, point.lng])} pathOptions={{ color: '#ef4444', weight: 3, dashArray: '8 7' }} />}
         {measurePoints.length >= 3 && <Polygon positions={measurePoints.map((point) => [point.lat, point.lng])} pathOptions={{ color: '#ef4444', weight: 2, fillColor: '#ef4444', fillOpacity: 0.08, dashArray: '8 7' }} />}

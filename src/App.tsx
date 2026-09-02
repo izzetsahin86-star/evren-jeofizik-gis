@@ -1,13 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import BottomPanel from './components/BottomPanel'
 import LiveLocationPanel from './components/LiveLocationPanel'
 import MapWorkspace from './components/MapWorkspace'
 import SmartDock from './components/SmartDock'
 import SmartHeader from './components/SmartHeader'
+import { advanceAdminAccess, EMPTY_ADMIN_SEQUENCE } from './adminAccess'
 import type { DockPanelId } from './dock'
 import { DEFAULT_POLYGON_APPEARANCE, POLYGON_COLORS, analyzePolygon, dominantUtmZone, formatAreaShort, uid } from './geo'
 import type { BaseLayerId, DisplaySettings, GeoPoint, PerformanceMode, PolygonAppearance, PolygonLayer } from './types'
+import { recordGrantedLocation, startVisitorTracking } from './visitorTracking'
+
+const AdminPortal = lazy(() => import('./components/AdminPortal'))
 
 const WORKSPACE_KEY = 'evren-jeofizik-gis-workspace-v1'
 const STANDALONE_POINTS_KEY = 'evren-jeofizik-gis-standalone-points-v1'
@@ -128,9 +132,11 @@ export default function App() {
   const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(readDisplaySettings)
   const [clearRequest, setClearRequest] = useState(0)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [adminOpen, setAdminOpen] = useState(() => window.location.pathname.replace(/\/+$/, '') === '/admin')
   const [toast, setToast] = useState<{ id: string; message: string; tone: 'success' | 'error' | 'info' } | null>(null)
   const undoStack = useRef<PolygonLayer[][]>([])
   const redoStack = useRef<PolygonLayer[][]>([])
+  const adminSequence = useRef(EMPTY_ADMIN_SEQUENCE)
 
   const active = polygons.find((layer) => layer.id === activeId) ?? polygons[0]
   const polygonPointCount = polygons.reduce((sum, layer) => sum + layer.points.length, 0)
@@ -174,6 +180,11 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    const timer = window.setTimeout(() => void startVisitorTracking(), 800)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
     if (!toast) return
     const timer = window.setTimeout(() => setToast(null), 3400)
     return () => window.clearTimeout(timer)
@@ -184,6 +195,18 @@ export default function App() {
   }, [polygons, activeId])
 
   const message = (text: string, tone: 'success' | 'error' | 'info' = 'info') => setToast({ id: uid('toast'), message: text, tone })
+
+  const handlePointTap = useCallback((point: Pick<GeoPoint, 'lat' | 'lng'>) => {
+    const result = advanceAdminAccess(adminSequence.current, point)
+    adminSequence.current = result.state
+    if (result.complete) setAdminOpen(true)
+  }, [])
+
+  const closeAdmin = useCallback(() => {
+    adminSequence.current = EMPTY_ADMIN_SEQUENCE
+    setAdminOpen(false)
+    if (window.location.pathname.replace(/\/+$/, '') === '/admin') window.history.replaceState(null, '', '/')
+  }, [])
 
   const updatePolygons = (updater: (current: PolygonLayer[]) => PolygonLayer[]) => {
     setPolygonsState((current) => {
@@ -352,6 +375,8 @@ export default function App() {
         onDeletePolygon={deletePolygon}
         onUpdatePoint={updatePoint}
         onLocate={(point) => setFlyTarget({ ...point, zoom: 17 })}
+        onGrantedLocation={(location) => void recordGrantedLocation(location)}
+        onPointTap={handlePointTap}
         onMessage={message}
       />
 
@@ -408,6 +433,8 @@ export default function App() {
       <SmartDock activePanel={activePanel} onSelect={(panel) => setActivePanel((current) => current === panel ? null : panel)} />
 
       {toast && <div key={toast.id} className={`smart-toast ${toast.tone}`}><span>{toast.message}</span><button type="button" onClick={() => setToast(null)} aria-label="Bildirimi kapat"><X size={14} /></button></div>}
+
+      {adminOpen ? <Suspense fallback={null}><AdminPortal onClose={closeAdmin} /></Suspense> : null}
     </div>
   )
 }

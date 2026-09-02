@@ -6,6 +6,7 @@ import './field-points-unified.css'
 import './document-coordinate-v2.css'
 import './document-coordinate-compact.css'
 import App from './App'
+import AdminSearchAccessFeature from './components/AdminSearchAccessFeature'
 import FieldPointsFeatureHost from './components/FieldPointsFeatureHost'
 import FieldPointsTransferInlineFeature from './components/FieldPointsTransferInlineFeature'
 import MapAddressSearchFeatureV2 from './components/MapAddressSearchFeatureV2'
@@ -14,6 +15,7 @@ import DocumentCoordinateFeatureV3 from './components/DocumentCoordinateFeatureV
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
+    <AdminSearchAccessFeature />
     <FieldPointsFeatureHost />
     <FieldPointsTransferInlineFeature />
     <MapAddressSearchFeatureV2 />

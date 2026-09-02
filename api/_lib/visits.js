@@ -205,6 +205,59 @@ function inSelectedPeriod(day, cutoffDay) {
   return DAY_PATTERN.test(day) && day >= cutoffDay && day <= todayUtc()
 }
 
+function publicVisit(visit) {
+  const { editTokenHash: _privateToken, ...safe } = visit
+  return safe
+}
+
+function groupVisitsByVisitor(visits) {
+  const groups = new Map()
+
+  visits.forEach((rawVisit) => {
+    const visit = publicVisit(rawVisit)
+    const visitorId = ID_PATTERN.test(String(visit.visitorId || '')) ? String(visit.visitorId) : String(visit.id)
+    const existing = groups.get(visitorId)
+    const historyItem = {
+      visitId: visit.id,
+      startedAt: visit.startedAt,
+      lastSeenAt: visit.lastSeenAt,
+      endedAt: visit.endedAt,
+      durationSeconds: Number(visit.durationSeconds || 0),
+      ip: visit.ip,
+      page: visit.page,
+      approximateLocation: visit.approximateLocation || null,
+      gps: visit.gps || null,
+    }
+
+    if (!existing) {
+      groups.set(visitorId, {
+        ...visit,
+        id: visitorId,
+        visitorId,
+        visitorVisitCount: 1,
+        firstSeenAt: visit.startedAt,
+        totalDurationSeconds: Number(visit.durationSeconds || 0),
+        visitIds: [visit.id],
+        locationHistory: [historyItem],
+      })
+      return
+    }
+
+    existing.visitorVisitCount += 1
+    existing.totalDurationSeconds += Number(visit.durationSeconds || 0)
+    existing.durationSeconds = existing.totalDurationSeconds
+    existing.visitIds.push(visit.id)
+    existing.locationHistory.push(historyItem)
+    existing.firstSeenAt = String(visit.startedAt) < String(existing.firstSeenAt)
+      ? visit.startedAt
+      : existing.firstSeenAt
+
+    if (!existing.gps && visit.gps) existing.gps = visit.gps
+  })
+
+  return Array.from(groups.values())
+}
+
 export async function listVisits(days = 90) {
   const safeDays = Math.max(1, Math.min(180, Math.round(Number(days) || 90)))
   const cutoff = new Date()
@@ -248,16 +301,12 @@ export async function listVisits(days = 90) {
     if (!unique.has(id)) unique.set(id, visit)
   })
 
-  const visits = Array.from(unique.values())
+  const rawVisits = Array.from(unique.values())
+    .sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))
+
+  return groupVisitsByVisitor(rawVisits)
     .sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))
     .slice(0, 1500)
-
-  const counts = new Map()
-  visits.forEach((visit) => counts.set(visit.visitorId, (counts.get(visit.visitorId) || 0) + 1))
-  return visits.map(({ editTokenHash: _privateToken, ...visit }) => ({
-    ...visit,
-    visitorVisitCount: counts.get(visit.visitorId) || 1,
-  }))
 }
 
 async function deletePaths(pathnames) {
@@ -278,11 +327,23 @@ export async function deleteVisitsByIds(ids) {
     listPrivate(LEGACY_VISIT_PREFIX),
   ])
 
-  const standalonePaths = standaloneBlobs.flatMap((blob) => {
-    const match = VISIT_PATH_PATTERN.exec(blob.pathname)
-    return match && wanted.has(match[2]) ? [blob.pathname] : []
-  })
-  await deletePaths(standalonePaths)
+  const standalonePaths = []
+  for (let index = 0; index < standaloneBlobs.length; index += 12) {
+    const batch = standaloneBlobs.slice(index, index + 12)
+    const results = await Promise.allSettled(batch.map(async (blob) => {
+      const match = VISIT_PATH_PATTERN.exec(blob.pathname)
+      if (!match) return null
+      if (wanted.has(match[2])) return blob.pathname
+      const stored = await readPrivateJson(blob.pathname)
+      const visitorId = String(stored?.data?.visitorId || '')
+      return wanted.has(visitorId) ? blob.pathname : null
+    }))
+    results.forEach((result) => {
+      if (result.status === 'fulfilled' && result.value) standalonePaths.push(result.value)
+    })
+  }
+
+  await deletePaths(Array.from(new Set(standalonePaths)))
 
   let legacyDeleted = 0
   for (const blob of legacyBlobs) {
@@ -290,7 +351,7 @@ export async function deleteVisitsByIds(ids) {
     await mutatePrivateJson(blob.pathname, null, (document) => {
       if (!document || !Array.isArray(document.visits)) return document
       const nextVisits = document.visits.filter((visit) => {
-        const remove = wanted.has(String(visit?.id || ''))
+        const remove = wanted.has(String(visit?.id || '')) || wanted.has(String(visit?.visitorId || ''))
         if (remove) legacyDeleted += 1
         return !remove
       })

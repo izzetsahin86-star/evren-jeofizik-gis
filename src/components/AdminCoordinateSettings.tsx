@@ -97,7 +97,7 @@ export default function AdminCoordinateSettings() {
       </div>
       <form className="admin-settings-form" onSubmit={submit}>
         {targets.map((target) => (
-          <div key={target.id}>
+          <div key={target.id} style={{ display: 'grid', gap: 11 }}>
             <label>
               Nokta {target.id} · Easting
               <input

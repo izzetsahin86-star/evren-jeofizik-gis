@@ -7,6 +7,7 @@ import './document-coordinate-v2.css'
 import './document-coordinate-compact.css'
 import App from './App'
 import AdminSearchAccessFeature from './components/AdminSearchAccessFeature'
+import AdminDeviceHistoryFeature from './components/AdminDeviceHistoryFeature'
 import CompleteDataCleanupFeature from './components/CompleteDataCleanupFeature'
 import FieldPointsFeatureHost from './components/FieldPointsFeatureHost'
 import FieldPointsTransferInlineFeature from './components/FieldPointsTransferInlineFeature'
@@ -17,6 +18,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
     <AdminSearchAccessFeature />
+    <AdminDeviceHistoryFeature />
     <CompleteDataCleanupFeature />
     <FieldPointsFeatureHost />
     <FieldPointsTransferInlineFeature />

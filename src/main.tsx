@@ -14,6 +14,7 @@ import FieldPointsTransferInlineFeature from './components/FieldPointsTransferIn
 import MapAddressSearchFeatureV2 from './components/MapAddressSearchFeatureV2'
 import DocumentCoordinateFeatureV3 from './components/DocumentCoordinateFeatureV3'
 
+// Feature modules are mounted independently so existing GIS flows stay isolated.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

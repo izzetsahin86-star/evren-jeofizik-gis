@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Box } from 'lucide-react'
 import { MoreDockIcon, primaryDockItems, secondaryDockItems, type DockPanelId } from '../dock'
 
 interface SmartDockProps {
@@ -39,6 +40,11 @@ export default function SmartDock({ activePanel, onSelect }: SmartDockProps) {
     onSelect(panel)
   }
 
+  const openUndergroundModel = () => {
+    setMoreOpen(false)
+    window.dispatchEvent(new CustomEvent('evren-open-underground-model'))
+  }
+
   return (
     <div className="smart-dock-zone" ref={zoneRef}>
       {moreOpen ? (
@@ -54,7 +60,10 @@ export default function SmartDock({ activePanel, onSelect }: SmartDockProps) {
                 </button>
               )
             })}
-            <div className="smart-dock-extra" />
+            <button type="button" data-feature-id="underground-model" onClick={openUndergroundModel}>
+              <span><Box size={20} strokeWidth={1.9} /></span>
+              <strong>3B Model</strong>
+            </button>
           </div>
         </section>
       ) : null}

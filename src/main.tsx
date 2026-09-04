@@ -14,6 +14,7 @@ import FieldPointsTransferInlineFeature from './components/FieldPointsTransferIn
 import MapAddressSearchFeatureV2 from './components/MapAddressSearchFeatureV2'
 import DocumentCoordinateFeatureV3 from './components/DocumentCoordinateFeatureV3'
 import UndergroundModelFeature from './components/UndergroundModelFeature'
+import UndergroundModelV2Feature from './components/UndergroundModelV2Feature'
 
 // Feature modules are mounted independently so existing GIS flows stay isolated.
 createRoot(document.getElementById('root')!).render(
@@ -27,6 +28,7 @@ createRoot(document.getElementById('root')!).render(
     <MapAddressSearchFeatureV2 />
     <DocumentCoordinateFeatureV3 />
     <UndergroundModelFeature />
+    <UndergroundModelV2Feature />
   </StrictMode>,
 )
 

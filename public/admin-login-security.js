@@ -1,5 +1,6 @@
 (() => {
   const MAX_ATTEMPTS = 3
+  const LOCK_SECONDS = 15 * 60
   const CARD_SELECTOR = '.admin-login-card'
   const FORM_SELECTOR = '.admin-login-form'
   const INPUT_SELECTOR = '#admin-password'
@@ -7,7 +8,6 @@
 
   let attemptsRemaining = MAX_ATTEMPTS
   let lockUntil = 0
-  let activeCard = null
 
   function countdown(seconds) {
     const safe = Math.max(0, Math.ceil(seconds))
@@ -77,39 +77,51 @@
     else if (input.placeholder.startsWith('Giriş kilitli')) input.placeholder = 'Parolanızı girin'
   }
 
-  async function refreshStatus() {
-    try {
-      const response = await fetch('/api/admin/login-status', {
-        method: 'GET',
-        credentials: 'same-origin',
-        cache: 'no-store',
-      })
-      if (!response.ok) return
-      const payload = await response.json()
-      const nextAttempts = Number(payload.attemptsRemaining)
-      attemptsRemaining = Number.isFinite(nextAttempts)
-        ? Math.max(0, Math.min(MAX_ATTEMPTS, Math.round(nextAttempts)))
-        : MAX_ATTEMPTS
+  function handleLoginPayload(payload) {
+    if (!payload || typeof payload !== 'object') return
 
-      const retryAfter = Number(payload.retryAfter)
-      lockUntil = payload.blocked && Number.isFinite(retryAfter) && retryAfter > 0
-        ? Date.now() + Math.ceil(retryAfter) * 1000
-        : 0
+    if (payload.ok === true) {
+      attemptsRemaining = MAX_ATTEMPTS
+      lockUntil = 0
       decorate()
-    } catch {
-      // Mevcut admin girişi bağımsız olarak çalışmaya devam eder.
+      return
+    }
+
+    if (payload.error === 'INVALID_PASSWORD') {
+      const remaining = Number(payload.attemptsRemaining)
+      attemptsRemaining = Number.isFinite(remaining)
+        ? Math.max(0, Math.min(MAX_ATTEMPTS, Math.round(remaining)))
+        : attemptsRemaining
+      if (attemptsRemaining <= 0) lockUntil = Date.now() + LOCK_SECONDS * 1000
+      decorate()
+      return
+    }
+
+    if (payload.error === 'TOO_MANY_ATTEMPTS') {
+      const retryAfter = Number(payload.retryAfter)
+      attemptsRemaining = 0
+      lockUntil = Date.now() + (Number.isFinite(retryAfter) && retryAfter > 0 ? Math.ceil(retryAfter) : LOCK_SECONDS) * 1000
+      decorate()
     }
   }
 
-  function discover() {
-    const card = document.querySelector(CARD_SELECTOR)
-    decorate()
-    if (card && card !== activeCard) {
-      activeCard = card
-      refreshStatus()
-    } else if (!card) {
-      activeCard = null
+  const nativeFetch = window.fetch.bind(window)
+  window.fetch = async function evrenAdminSecurityFetch(input, init) {
+    const response = await nativeFetch(input, init)
+    try {
+      const rawUrl = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input)
+      const pathname = new URL(rawUrl, window.location.href).pathname
+      if (pathname === '/api/admin/login') {
+        response.clone().json().then(handleLoginPayload).catch(() => undefined)
+      }
+    } catch {
+      // Admin login response inspection is best-effort only.
     }
+    return response
   }
 
   document.addEventListener('submit', (event) => {
@@ -119,23 +131,19 @@
       event.preventDefault()
       event.stopImmediatePropagation()
       decorate()
-      return
     }
-    window.setTimeout(refreshStatus, 450)
-    window.setTimeout(refreshStatus, 950)
   }, true)
 
   ensureStyles()
-  const observer = new MutationObserver(discover)
+  const observer = new MutationObserver(decorate)
   observer.observe(document.documentElement, { childList: true, subtree: true })
-  discover()
+  decorate()
 
   window.setInterval(() => {
     if (lockUntil > 0 && lockUntil <= Date.now()) {
       lockUntil = 0
       attemptsRemaining = MAX_ATTEMPTS
       decorate()
-      refreshStatus()
     } else if (lockUntil > Date.now()) {
       decorate()
     }

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'evren-gis-v40'
+const CACHE_VERSION = 'evren-gis-v41'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const TILE_CACHE = `${CACHE_VERSION}-tiles`
 const SHELL_FILES = ['/', '/index.html', '/offline.html', '/manifest.webmanifest', '/icons/evren-gis.svg', '/icons/evren-jeofizik-logo.svg', '/fonts/EvrenSans.ttf', '/fonts/EvrenSans-Bold.ttf']
@@ -62,7 +62,7 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
       try {
-        const response = await fetch(request)
+        const response = await fetch(request, { cache: 'no-store' })
         const cache = await caches.open(SHELL_CACHE)
         await cache.put('/index.html', response.clone())
         return response

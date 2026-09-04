@@ -20,6 +20,7 @@ type LoginStatusPayload = {
   retryAfter?: number
 }
 
+// Isolated login-status UI: no GIS or visitor-recording state is changed here.
 export default function AdminLoginSecurityStatusFeature() {
   useEffect(() => {
     let attemptsRemaining = MAX_ATTEMPTS

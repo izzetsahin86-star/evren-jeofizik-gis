@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import {
   Box,
   Boxes,
@@ -73,19 +72,7 @@ function closeFeatureOverlays() {
 export default function WorkCenterFeature() {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<WorkTab>(readLastTab)
-  const [settingsTarget, setSettingsTarget] = useState<HTMLElement | null>(null)
   const active = useMemo(() => WORK_ITEMS.find((item) => item.id === tab) ?? WORK_ITEMS[2], [tab])
-
-  useEffect(() => {
-    const syncTarget = () => {
-      const target = document.querySelector<HTMLElement>('.smart-sheet-settings .smart-sheet-body .panel-stack')
-      setSettingsTarget((current) => current === target ? current : target)
-    }
-    syncTarget()
-    const observer = new MutationObserver(syncTarget)
-    observer.observe(document.body, { childList: true, subtree: true })
-    return () => observer.disconnect()
-  }, [])
 
   useEffect(() => {
     const show = () => setOpen(true)
@@ -127,38 +114,23 @@ export default function WorkCenterFeature() {
     window.setTimeout(() => window.location.reload(), 80)
   }
 
-  const settingsEntry = settingsTarget ? createPortal(
-    <section className="work-settings-card" aria-label="Çalışma merkezi">
-      <div className="work-settings-icon"><Boxes size={22} /></div>
-      <div className="work-settings-copy">
-        <strong>Çalışma</strong>
-        <span>3B modelleme, tüm DES araçları ve rapor haritaları tek pencerede</span>
-      </div>
-      <button type="button" onClick={() => setOpen(true)}>Aç</button>
-    </section>,
-    settingsTarget,
-  ) : null
+  if (!open) return null
 
   return (
-    <>
-      {settingsEntry}
-      {open ? (
-        <div className="work-center-chrome" role="dialog" aria-modal="true" aria-label="Çalışma Merkezi">
-          <header className="work-center-header">
-            <div className="work-center-brand"><span><Boxes size={22} /></span><div><small>EVREN GIS · TEK ÇALIŞMA ALANI</small><strong>Çalışma Merkezi</strong></div></div>
-            <div className="work-center-actions">
-              <button type="button" className="work-center-clear" onClick={clearAllDes}><Trash2 size={15} /> Tüm DES'i Sil</button>
-              <button type="button" className="work-center-close" onClick={closeCenter} aria-label="Çalışma merkezini kapat"><X size={20} /></button>
-            </div>
-          </header>
-          <nav className="work-center-tabs" aria-label="Çalışma araçları">
-            {WORK_ITEMS.map((item) => {
-              const Icon = item.icon
-              return <button type="button" key={item.id} className={tab === item.id ? 'is-active' : ''} onClick={() => setTab(item.id)}><Icon size={16} /><span>{item.label}</span><small>{item.shortLabel}</small></button>
-            })}
-          </nav>
+    <div className="work-center-chrome" role="dialog" aria-modal="true" aria-label="Çalışma Merkezi">
+      <header className="work-center-header">
+        <div className="work-center-brand"><span><Boxes size={22} /></span><div><small>EVREN GIS · TEK ÇALIŞMA ALANI</small><strong>Çalışma Merkezi</strong></div></div>
+        <div className="work-center-actions">
+          <button type="button" className="work-center-clear" onClick={clearAllDes}><Trash2 size={15} /> Tüm DES'i Sil</button>
+          <button type="button" className="work-center-close" onClick={closeCenter} aria-label="Çalışma merkezini kapat"><X size={20} /></button>
         </div>
-      ) : null}
-    </>
+      </header>
+      <nav className="work-center-tabs" aria-label="Çalışma araçları">
+        {WORK_ITEMS.map((item) => {
+          const Icon = item.icon
+          return <button type="button" key={item.id} className={tab === item.id ? 'is-active' : ''} onClick={() => setTab(item.id)}><Icon size={16} /><span>{item.label}</span><small>{item.shortLabel}</small></button>
+        })}
+      </nav>
+    </div>
   )
 }

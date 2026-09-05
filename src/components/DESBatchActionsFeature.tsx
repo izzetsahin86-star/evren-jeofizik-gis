@@ -5,7 +5,9 @@ import {
   createInitialLayers,
   fitLayerModel,
   prepareObserved,
+  type DesFitResult,
   type DesLayerModel,
+  type ObservedPoint,
 } from './DESProfessionalEngine'
 import {
   finalizeDualAnalysis,
@@ -36,6 +38,14 @@ type ProfessionalModel = {
 }
 
 type ProfessionalStore = Record<string, ProfessionalModel>
+
+type ProfessionalCandidate = {
+  layerCount: number
+  result: DesFitResult
+  bic: number
+  overfitPenalty: number
+  selectionScore: number
+}
 
 type BusyMode = 'professional' | 'dual' | null
 
@@ -82,8 +92,16 @@ function readDualStore(): Record<string, DualAnalysisResult> {
   }
 }
 
-function validLayerCount(value: number) {
-  return Math.max(3, Math.min(6, Math.round(value) || 4))
+function professionalBic(observed: ObservedPoint[], response: number[], parameterCount: number) {
+  const n = observed.length
+  if (!n || response.length !== n) return Number.POSITIVE_INFINITY
+  const sse = observed.reduce((sum, point, index) => {
+    const predicted = Math.max(0.001, response[index])
+    const residual = Math.log(predicted / point.rho)
+    return sum + residual * residual
+  }, 0)
+  const mse = Math.max(1e-12, sse / n)
+  return n * Math.log(mse) + parameterCount * Math.log(Math.max(2, n))
 }
 
 function yieldToUi(ms = 18) {
@@ -128,6 +146,7 @@ export default function DESBatchActionsFeature() {
     setStatus('')
     const existing = readProfessionalStore()
     const next: ProfessionalStore = { ...existing }
+    const selectedCounts: Record<number, number> = { 3: 0, 4: 0, 5: 0, 6: 0 }
     let fitted = 0
     let skipped = 0
 
@@ -139,27 +158,52 @@ export default function DESBatchActionsFeature() {
           skipped += 1
           continue
         }
-        const oldModel = existing[record.id]
-        const layerCount = validLayerCount(oldModel?.layers?.length || 4)
-        const startLayers = oldModel?.layers?.length === layerCount
-          ? oldModel.layers.map((layer) => ({ ...layer }))
-          : createInitialLayers(observed, layerCount)
-        setProgress(`${recordIndex + 1}/${records.length} · ${record.name} · ${layerCount} tabaka otomatik uyumlanıyor…`)
-        await yieldToUi()
-        const result = fitLayerModel(observed, layerCount, startLayers)
+
+        const candidates: ProfessionalCandidate[] = []
+        for (const layerCount of [3, 4, 5, 6]) {
+          setProgress(`${recordIndex + 1}/${records.length} · ${record.name} · ${layerCount} tabaka deneniyor…`)
+          await yieldToUi(16)
+          const result = fitLayerModel(observed, layerCount, createInitialLayers(observed, layerCount))
+          const parameterCount = layerCount * 2 - 1
+          const bic = professionalBic(observed, result.response, parameterCount)
+          const overfitPenalty = Math.max(0, parameterCount + 2 - observed.length) * 12
+          candidates.push({
+            layerCount,
+            result,
+            bic,
+            overfitPenalty,
+            selectionScore: bic + overfitPenalty,
+          })
+        }
+
+        const best = candidates.reduce((currentBest, candidate) => (
+          candidate.selectionScore < currentBest.selectionScore ? candidate : currentBest
+        ))
+        const previousLayers = existing[record.id]?.layers || []
+        const layers = best.result.layers.map((layer, index) => ({
+          ...layer,
+          interpretation: previousLayers[index]?.interpretation || '',
+        }))
+
         next[record.id] = {
           recordId: record.id,
-          layers: result.layers.map((layer) => ({ ...layer })),
-          rms: result.rms,
-          curveType: result.curveType,
-          method: 'Schlumberger · Ghosh tipi 9 noktalı dijital filtre yaklaşımı · log-uzay uyum',
+          layers,
+          rms: best.result.rms,
+          curveType: best.result.curveType,
+          method: `Schlumberger · Ghosh tipi 9 noktalı dijital filtre yaklaşımı · log-uzay uyum · 3–6 tabaka otomatik tarama · BIC + karmaşıklık cezası · önerilen ${best.layerCount} tabaka`,
           updatedAt: Date.now(),
         }
+        selectedCounts[best.layerCount] += 1
         fitted += 1
       }
+
+      const distribution = [3, 4, 5, 6]
+        .filter((count) => selectedCounts[count] > 0)
+        .map((count) => `${count} tabaka: ${selectedCounts[count]}`)
+        .join(' · ')
       setPendingModels(next)
       setPendingCount(fitted)
-      setStatus(`${fitted} DES otomatik uyumlandı${skipped ? ` · ${skipped} kayıt yetersiz veri nedeniyle atlandı` : ''}. Şimdi “Tüm Modelleri Kaydet” ile topluca kaydedebilirsin.`)
+      setStatus(`${fitted} DES için 3–6 tabaka tarandı ve en uygun model seçildi${distribution ? ` · ${distribution}` : ''}${skipped ? ` · ${skipped} kayıt yetersiz veri nedeniyle atlandı` : ''}. “Tüm Modelleri Kaydet” ile kaydedebilir; sonra her DES'i 3–6 tabaka arasında manuel değiştirebilirsin.`)
     } catch (error) {
       setPendingModels(null)
       setPendingCount(0)
@@ -179,7 +223,7 @@ export default function DESBatchActionsFeature() {
     setPendingModels(null)
     const count = pendingCount
     setPendingCount(0)
-    setStatus(`${count} otomatik uyumlanmış DES modeli topluca kaydedildi.`)
+    setStatus(`${count} otomatik uyumlanmış DES modeli topluca kaydedildi. İstersen seçili DES üzerinde 3–6 tabaka arasında manuel değişiklik yapabilirsin.`)
 
     if (document.querySelector('.despro-overlay')) {
       window.dispatchEvent(new CustomEvent('evren-open-des-professional'))
@@ -239,7 +283,7 @@ export default function DESBatchActionsFeature() {
   const professionalActions = (
     <>
       <button type="button" className="desbatch-button" onClick={() => void autoFitAll()} disabled={Boolean(busyMode)}>
-        <Sparkles size={15} /> {busyMode === 'professional' ? 'Tümü Uyumlanıyor…' : 'Tümüne Otomatik Uyumla'}
+        <Sparkles size={15} /> {busyMode === 'professional' ? '3–6 Taranıyor…' : 'Tümüne Otomatik Uyumla'}
       </button>
       <button type="button" className="desbatch-button save" onClick={saveAllModels} disabled={Boolean(busyMode) || !pendingModels || pendingCount === 0}>
         <Save size={15} /> Tüm Modelleri Kaydet
@@ -252,7 +296,7 @@ export default function DESBatchActionsFeature() {
       {professionalTarget ? createPortal(professionalActions, professionalTarget) : null}
       {calibrationTarget ? createPortal(
         <div className="desbatch-cal-actions">
-          <button type="button" onClick={() => void autoFitAll()} disabled={Boolean(busyMode)}><Sparkles size={14} /> {busyMode === 'professional' ? 'Tümü Uyumlanıyor…' : 'Tümüne Otomatik Uyumla'}</button>
+          <button type="button" onClick={() => void autoFitAll()} disabled={Boolean(busyMode)}><Sparkles size={14} /> {busyMode === 'professional' ? '3–6 Taranıyor…' : 'Tümüne Otomatik Uyumla'}</button>
           <button type="button" onClick={saveAllModels} disabled={Boolean(busyMode) || !pendingModels || pendingCount === 0}><Save size={14} /> Tüm Modelleri Kaydet</button>
         </div>,
         calibrationTarget,

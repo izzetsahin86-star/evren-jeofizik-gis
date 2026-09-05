@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Activity, Box, FileSpreadsheet, Layers3, Scale, SlidersHorizontal } from 'lucide-react'
+import { Boxes } from 'lucide-react'
 import { MoreDockIcon, primaryDockItems, secondaryDockItems, type DockPanelId } from '../dock'
 
 interface SmartDockProps {
@@ -40,43 +40,23 @@ export default function SmartDock({ activePanel, onSelect }: SmartDockProps) {
     onSelect(panel)
   }
 
-  const openUndergroundModel = () => {
+  const openWorkCenter = () => {
     setMoreOpen(false)
-    window.dispatchEvent(new CustomEvent('evren-open-underground-model'))
+    window.dispatchEvent(new CustomEvent('evren-open-work-center'))
   }
 
-  const openUndergroundModelV2 = () => {
-    setMoreOpen(false)
-    window.dispatchEvent(new CustomEvent('evren-open-underground-model-v2'))
-  }
-
-  const openDesAnalysis = () => {
-    setMoreOpen(false)
-    window.dispatchEvent(new CustomEvent('evren-open-des-analysis'))
-  }
-
-  const openDesProfessional = () => {
-    setMoreOpen(false)
-    window.dispatchEvent(new CustomEvent('evren-open-des-professional'))
-  }
-
-  const openDesCalibration = () => {
-    setMoreOpen(false)
-    window.dispatchEvent(new CustomEvent('evren-open-des-calibration'))
-  }
-
-  const openDesDualInversion = () => {
-    setMoreOpen(false)
-    window.dispatchEvent(new CustomEvent('evren-open-des-dual-inversion'))
-  }
+  const importItem = secondaryDockItems.find((item) => item.id === 'import')
+  const exportItem = secondaryDockItems.find((item) => item.id === 'export')
+  const settingsItem = secondaryDockItems.find((item) => item.id === 'settings')
+  const orderedItems = [importItem, exportItem].filter(Boolean) as typeof secondaryDockItems
 
   return (
     <div className="smart-dock-zone" ref={zoneRef}>
       {moreOpen ? (
         <section className="smart-dock-menu" aria-label="Diğer araçlar">
-          <header><strong>Diğer Araçlar</strong><small>Aktarım ve çalışma ayarları</small></header>
+          <header><strong>Diğer Araçlar</strong><small>Aktarım, çalışma ve ayarlar</small></header>
           <div className="smart-dock-menu-grid">
-            {secondaryDockItems.map((item) => {
+            {orderedItems.map((item) => {
               const Icon = item.icon
               return (
                 <button key={item.id} data-panel-id={item.id} type="button" className={activePanel === item.id ? 'is-active' : ''} onClick={() => select(item.id)}>
@@ -85,30 +65,19 @@ export default function SmartDock({ activePanel, onSelect }: SmartDockProps) {
                 </button>
               )
             })}
-            <button type="button" data-feature-id="underground-model" onClick={openUndergroundModel}>
-              <span><Box size={20} strokeWidth={1.9} /></span>
-              <strong>3B Model</strong>
+            <button type="button" data-feature-id="work-center" onClick={openWorkCenter}>
+              <span><Boxes size={20} strokeWidth={1.9} /></span>
+              <strong>Çalışma</strong>
             </button>
-            <button type="button" data-feature-id="underground-model-v2" onClick={openUndergroundModelV2}>
-              <span><Layers3 size={20} strokeWidth={1.9} /></span>
-              <strong>3B Studio V2</strong>
-            </button>
-            <button type="button" data-feature-id="des-analysis" onClick={openDesAnalysis}>
-              <span><FileSpreadsheet size={20} strokeWidth={1.9} /></span>
-              <strong>DES Analiz</strong>
-            </button>
-            <button type="button" data-feature-id="des-professional" onClick={openDesProfessional}>
-              <span><SlidersHorizontal size={20} strokeWidth={1.9} /></span>
-              <strong>DES Professional</strong>
-            </button>
-            <button type="button" data-feature-id="des-calibration" onClick={openDesCalibration}>
-              <span><Scale size={20} strokeWidth={1.9} /></span>
-              <strong>DES Doğrulama</strong>
-            </button>
-            <button type="button" data-feature-id="des-dual-inversion" onClick={openDesDualInversion}>
-              <span><Activity size={20} strokeWidth={1.9} /></span>
-              <strong>DES Otomatik</strong>
-            </button>
+            {settingsItem ? (() => {
+              const Icon = settingsItem.icon
+              return (
+                <button key={settingsItem.id} data-panel-id={settingsItem.id} type="button" className={activePanel === settingsItem.id ? 'is-active' : ''} onClick={() => select(settingsItem.id)}>
+                  <span><Icon size={20} strokeWidth={1.9} /></span>
+                  <strong>{settingsItem.label}</strong>
+                </button>
+              )
+            })() : null}
           </div>
         </section>
       ) : null}

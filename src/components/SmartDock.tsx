@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Box, FileSpreadsheet, Layers3 } from 'lucide-react'
+import { Box, FileSpreadsheet, Layers3, SlidersHorizontal } from 'lucide-react'
 import { MoreDockIcon, primaryDockItems, secondaryDockItems, type DockPanelId } from '../dock'
 
 interface SmartDockProps {
@@ -55,6 +55,11 @@ export default function SmartDock({ activePanel, onSelect }: SmartDockProps) {
     window.dispatchEvent(new CustomEvent('evren-open-des-analysis'))
   }
 
+  const openDesProfessional = () => {
+    setMoreOpen(false)
+    window.dispatchEvent(new CustomEvent('evren-open-des-professional'))
+  }
+
   return (
     <div className="smart-dock-zone" ref={zoneRef}>
       {moreOpen ? (
@@ -81,6 +86,10 @@ export default function SmartDock({ activePanel, onSelect }: SmartDockProps) {
             <button type="button" data-feature-id="des-analysis" onClick={openDesAnalysis}>
               <span><FileSpreadsheet size={20} strokeWidth={1.9} /></span>
               <strong>DES Analiz</strong>
+            </button>
+            <button type="button" data-feature-id="des-professional" onClick={openDesProfessional}>
+              <span><SlidersHorizontal size={20} strokeWidth={1.9} /></span>
+              <strong>DES Professional</strong>
             </button>
           </div>
         </section>

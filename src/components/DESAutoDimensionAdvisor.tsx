@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Box, CheckCircle2, Layers3, Map, Route, Sparkles, TriangleAlert } from 'lucide-react'
+import { Box, CheckCircle2, Layers3, Map as MapIcon, Route, Sparkles, TriangleAlert } from 'lucide-react'
 import './DESAutoDimensionAdvisor.css'
 
 const RECORDS_KEY = 'evren-jeofizik-gis-des-analysis-v1'
@@ -255,7 +255,7 @@ export default function DESAutoDimensionAdvisor() {
         <StatusCard icon={<Layers3 size={16} />} title="1B" item={decision.oneB} />
         <StatusCard icon={<Route size={16} />} title="2B KESİT" item={decision.twoB} />
         <StatusCard icon={<Box size={16} />} title="3B SAHA" item={decision.threeB} />
-        <StatusCard icon={<Map size={16} />} title="SEVİYE HARİTASI" item={decision.maps} />
+        <StatusCard icon={<MapIcon size={16} />} title="SEVİYE HARİTASI" item={decision.maps} />
       </div>
       <div className="desdimension-actions">
         {decision.targetView ? <button type="button" onClick={() => clickReportView(decision.targetView)}><CheckCircle2 size={15} /> Önerilen Görünümü Aç</button> : null}

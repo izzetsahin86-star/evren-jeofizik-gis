@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Box, CheckCircle2, Layers3, Map, Route, Sparkles, TriangleAlert } from 'lucide-react'
 import './DESAutoDimensionAdvisor.css'
 
@@ -183,7 +183,7 @@ function clickReportView(target: Decision['targetView']) {
   if (button && !button.disabled) button.click()
 }
 
-function StatusCard({ icon, title, item }: { icon: React.ReactNode; title: string; item: Decision['oneB'] }) {
+function StatusCard({ icon, title, item }: { icon: ReactNode; title: string; item: Decision['oneB'] }) {
   return <div className={`desdimension-card is-${item.level}`}>
     <span>{icon}</span>
     <div><small>{title}</small><strong>{item.label}</strong><p>{item.detail}</p></div>

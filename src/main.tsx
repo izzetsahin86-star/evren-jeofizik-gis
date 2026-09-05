@@ -20,10 +20,9 @@ import DESProfessionalFeature from './components/DESProfessionalFeature'
 import DESCalibrationFeature from './components/DESCalibrationFeature'
 import DESDualInversionFeature from './components/DESDualInversionFeature'
 import DESReportMapsFeature from './components/DESReportMapsFeature'
-import DESUnifiedWorkspaceFeature from './components/DESUnifiedWorkspaceFeature'
 import WorkCenterFeature from './components/WorkCenterFeature'
 
-// Existing feature modules stay mounted; Work Center now orchestrates the unified DES flow.
+// Feature modules are mounted independently so existing GIS flows stay isolated.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
@@ -41,7 +40,6 @@ createRoot(document.getElementById('root')!).render(
     <DESCalibrationFeature />
     <DESDualInversionFeature />
     <DESReportMapsFeature />
-    <DESUnifiedWorkspaceFeature />
     <WorkCenterFeature />
   </StrictMode>,
 )

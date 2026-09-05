@@ -19,6 +19,7 @@ import DESAnalysisFeature from './components/DESAnalysisFeature'
 import DESProfessionalFeature from './components/DESProfessionalFeature'
 import DESCalibrationFeature from './components/DESCalibrationFeature'
 import DESDualInversionFeature from './components/DESDualInversionFeature'
+import WorkCenterFeature from './components/WorkCenterFeature'
 
 // Feature modules are mounted independently so existing GIS flows stay isolated.
 createRoot(document.getElementById('root')!).render(
@@ -37,6 +38,7 @@ createRoot(document.getElementById('root')!).render(
     <DESProfessionalFeature />
     <DESCalibrationFeature />
     <DESDualInversionFeature />
+    <WorkCenterFeature />
   </StrictMode>,
 )
 

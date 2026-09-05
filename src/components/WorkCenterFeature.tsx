@@ -1,16 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import {
-  Box,
-  Boxes,
-  FileSpreadsheet,
-  Layers3,
-  MapPinned,
-  Scale,
-  SlidersHorizontal,
-  Sparkles,
-  Trash2,
-  X,
-} from 'lucide-react'
+import { Box, Boxes, Layers3, Sparkles, Trash2, X } from 'lucide-react'
 import './WorkCenterFeature.css'
 
 const OPEN_EVENT = 'evren-open-work-center'
@@ -20,9 +9,10 @@ const DES_KEYS = [
   'evren-jeofizik-gis-des-professional-v2',
   'evren-jeofizik-gis-des-calibration-v1',
   'evren-jeofizik-gis-des-dual-inversion-v1',
+  'evren-jeofizik-gis-des-auto-pipeline-v1',
 ]
 
-type WorkTab = 'model' | 'studio' | 'des' | 'professional' | 'validation' | 'automatic' | 'report'
+type WorkTab = 'model' | 'studio' | 'des'
 
 type WorkItem = {
   id: WorkTab
@@ -35,11 +25,7 @@ type WorkItem = {
 const WORK_ITEMS: WorkItem[] = [
   { id: 'model', label: '3B Model', shortLabel: '3B Model', event: 'evren-open-underground-model', icon: Box },
   { id: 'studio', label: '3B Studio', shortLabel: '3B Studio', event: 'evren-open-underground-model-v2', icon: Layers3 },
-  { id: 'des', label: 'DES Analiz', shortLabel: 'DES', event: 'evren-open-des-analysis', icon: FileSpreadsheet },
-  { id: 'professional', label: 'DES Professional', shortLabel: 'Professional', event: 'evren-open-des-professional', icon: SlidersHorizontal },
-  { id: 'validation', label: 'DES Doğrulama', shortLabel: 'Doğrulama', event: 'evren-open-des-calibration', icon: Scale },
-  { id: 'automatic', label: 'DES Otomatik', shortLabel: 'Otomatik', event: 'evren-open-des-dual-inversion', icon: Sparkles },
-  { id: 'report', label: 'DES Rapor', shortLabel: 'Rapor', event: 'evren-open-des-report-maps', icon: MapPinned },
+  { id: 'des', label: 'DES Çalışması', shortLabel: 'DES Çalışması', event: 'evren-open-des-workspace', icon: Sparkles },
 ]
 
 const FEATURE_OVERLAYS = [
@@ -49,6 +35,7 @@ const FEATURE_OVERLAYS = [
   '.descal-overlay',
   '.desdual-overlay',
   '.desreport-overlay',
+  '.desworkspace-overlay',
 ]
 
 function readLastTab(): WorkTab {
@@ -107,7 +94,7 @@ export default function WorkCenterFeature() {
         return Array.isArray(raw) ? raw.length : 0
       } catch { return 0 }
     })()
-    if (!window.confirm(`${count || 'Tüm'} DES kaydı ve bunlara bağlı Professional / Doğrulama / Otomatik model sonuçları silinsin mi? Bu işlem geri alınamaz.`)) return
+    if (!window.confirm(`${count || 'Tüm'} DES kaydı ve bunlara bağlı model / doğrulama / otomatik işlem sonuçları silinsin mi? Bu işlem geri alınamaz.`)) return
     DES_KEYS.forEach((key) => localStorage.removeItem(key))
     window.dispatchEvent(new CustomEvent('evren-des-analysis-changed'))
     closeCenter()

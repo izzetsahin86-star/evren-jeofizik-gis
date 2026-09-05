@@ -5,6 +5,7 @@ import {
   Boxes,
   FileSpreadsheet,
   Layers3,
+  MapPinned,
   Scale,
   SlidersHorizontal,
   Sparkles,
@@ -22,7 +23,7 @@ const DES_KEYS = [
   'evren-jeofizik-gis-des-dual-inversion-v1',
 ]
 
-type WorkTab = 'model' | 'studio' | 'des' | 'professional' | 'validation' | 'automatic'
+type WorkTab = 'model' | 'studio' | 'des' | 'professional' | 'validation' | 'automatic' | 'report'
 
 type WorkItem = {
   id: WorkTab
@@ -39,6 +40,7 @@ const WORK_ITEMS: WorkItem[] = [
   { id: 'professional', label: 'DES Professional', shortLabel: 'Professional', event: 'evren-open-des-professional', icon: SlidersHorizontal },
   { id: 'validation', label: 'DES Doğrulama', shortLabel: 'Doğrulama', event: 'evren-open-des-calibration', icon: Scale },
   { id: 'automatic', label: 'DES Otomatik', shortLabel: 'Otomatik', event: 'evren-open-des-dual-inversion', icon: Sparkles },
+  { id: 'report', label: 'DES Rapor', shortLabel: 'Rapor', event: 'evren-open-des-report-maps', icon: MapPinned },
 ]
 
 const FEATURE_OVERLAYS = [
@@ -47,6 +49,7 @@ const FEATURE_OVERLAYS = [
   '.despro-overlay',
   '.descal-overlay',
   '.desdual-overlay',
+  '.desreport-overlay',
 ]
 
 function readLastTab(): WorkTab {
@@ -129,7 +132,7 @@ export default function WorkCenterFeature() {
       <div className="work-settings-icon"><Boxes size={22} /></div>
       <div className="work-settings-copy">
         <strong>Çalışma</strong>
-        <span>3B modelleme ve tüm DES araçları tek pencerede</span>
+        <span>3B modelleme, tüm DES araçları ve rapor haritaları tek pencerede</span>
       </div>
       <button type="button" onClick={() => setOpen(true)}>Aç</button>
     </section>,

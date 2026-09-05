@@ -26,7 +26,11 @@ type DesMeasurement = {
   mn: number
   current: number | null
   voltage: number | null
+  currentReverse: number | null
+  voltageReverse: number | null
   k: number | null
+  rhoForward: number | null
+  rhoReverse: number | null
   rho: number
 }
 
@@ -92,7 +96,11 @@ function normalizeRecord(value: Partial<DesRecord>, index: number): DesRecord | 
       mn: Number(item.mn),
       current: finiteOrNull(item.current),
       voltage: finiteOrNull(item.voltage),
+      currentReverse: finiteOrNull(item.currentReverse),
+      voltageReverse: finiteOrNull(item.voltageReverse),
       k: finiteOrNull(item.k),
+      rhoForward: finiteOrNull(item.rhoForward),
+      rhoReverse: finiteOrNull(item.rhoReverse),
       rho: Number(item.rho),
     }))
     .filter((item) => Number.isFinite(item.ab2) && item.ab2 > 0 && Number.isFinite(item.rho) && item.rho > 0)
@@ -176,18 +184,33 @@ function findHeader(rows: Map<number, Map<number, CellValue>>) {
     let mn: number | null = null
     let current: number | null = null
     let voltage: number | null = null
+    let currentReverse: number | null = null
+    let voltageReverse: number | null = null
     let k: number | null = null
     let rho: number | null = null
+    let rhoAverage: number | null = null
+    let rhoForward: number | null = null
+    let rhoReverse: number | null = null
     for (const [column, value] of columns) {
-      const text = fold(value).replace(/\s+/g, '')
+      const text = fold(value).replace(/[\s_.-]+/g, '')
       if (text === 'ab/2' || text === 'ab2') ab2 = column
       else if (text === 'mn' || text === 'mn/2') mn = column
       else if (text === 'i') current = column
+      else if (text === 'iduz' || text === 'iduzakim') current = column
+      else if (text === 'iters' || text === 'itersakim') currentReverse = column
       else if (text === 'v') voltage = column
+      else if (text === 'vduz' || text === 'vduzvoltaj') voltage = column
+      else if (text === 'vters' || text === 'vtersvoltaj') voltageReverse = column
       else if (text === 'k') k = column
+      else if (text === 'rort' || text === 'rortalama' || text === 'rhoort' || text === 'rhoortalama') rhoAverage = column
+      else if (text === 'r1' || text === 'rho1') rhoForward = column
+      else if (text === 'r2' || text === 'rho2') rhoReverse = column
       else if (text === 'r' || text === 'rho' || text.includes('ozdirenc')) rho = column
     }
-    if (ab2 !== null && mn !== null && rho !== null) return { rowNumber, ab2, mn, current, voltage, k, rho }
+    const selectedRho = rhoAverage ?? rho
+    if (ab2 !== null && mn !== null && selectedRho !== null) {
+      return { rowNumber, ab2, mn, current, voltage, currentReverse, voltageReverse, k, rho: selectedRho, rhoForward, rhoReverse }
+    }
   }
   return null
 }
@@ -237,7 +260,7 @@ async function parseDesWorkbook(file: File): Promise<DesRecord> {
       break
     }
   }
-  if (!rows || !header) throw new Error('AB/2, MN ve r sütunları bulunamadı. DES Excel formatını kontrol edin.')
+  if (!rows || !header) throw new Error('AB/2, MN ve r / rort sütunları bulunamadı. DES Excel formatını kontrol edin.')
 
   const measurements: DesMeasurement[] = []
   Array.from(rows.entries()).sort((a, b) => a[0] - b[0]).forEach(([rowNumber, columns]) => {
@@ -251,7 +274,11 @@ async function parseDesWorkbook(file: File): Promise<DesRecord> {
       mn,
       current: header!.current === null ? null : finiteOrNull(columns.get(header!.current)),
       voltage: header!.voltage === null ? null : finiteOrNull(columns.get(header!.voltage)),
+      currentReverse: header!.currentReverse === null ? null : finiteOrNull(columns.get(header!.currentReverse)),
+      voltageReverse: header!.voltageReverse === null ? null : finiteOrNull(columns.get(header!.voltageReverse)),
       k: header!.k === null ? null : finiteOrNull(columns.get(header!.k)),
+      rhoForward: header!.rhoForward === null ? null : finiteOrNull(columns.get(header!.rhoForward)),
+      rhoReverse: header!.rhoReverse === null ? null : finiteOrNull(columns.get(header!.rhoReverse)),
       rho,
     })
   })
@@ -297,9 +324,15 @@ function repeatChecks(record: DesRecord): RepeatCheck[] {
 
 function formulaChecks(record: DesRecord) {
   const valid = record.measurements.flatMap((item) => {
-    if (item.current === null || item.voltage === null || item.k === null || item.current === 0) return []
-    const calculated = item.k * item.voltage / item.current
-    if (!Number.isFinite(calculated) || item.rho <= 0) return []
+    if (item.k === null || item.rho <= 0) return []
+    const forward = item.current !== null && item.voltage !== null && item.current !== 0
+      ? item.k * item.voltage / item.current
+      : null
+    const reverse = item.currentReverse !== null && item.voltageReverse !== null && item.currentReverse !== 0
+      ? item.k * item.voltageReverse / item.currentReverse
+      : null
+    const calculated = forward !== null && reverse !== null ? (forward + reverse) / 2 : forward ?? reverse
+    if (calculated === null || !Number.isFinite(calculated)) return []
     const differencePct = Math.abs(calculated - item.rho) / item.rho * 100
     return [{ ...item, calculated, differencePct }]
   })
@@ -509,12 +542,12 @@ export default function DESAnalysisFeature() {
                 const info = qualityInfo(record)
                 return <button type="button" key={record.id} className={selected?.id === record.id ? 'is-selected' : ''} onClick={() => setSelectedId(record.id)}><span className={`des-quality-dot ${info.tone}`} /><span><strong>{record.name}</strong><small>{record.measurements.length} ölçüm{record.province ? ` · ${record.province}${record.district ? `/${record.district}` : ''}` : ''}</small></span>{info.tone !== 'good' ? <AlertTriangle size={14} /> : null}</button>
               })}
-              {!records.length ? <div className="des-list-empty"><FileSpreadsheet size={28} /><strong>DES Excel yükleyin</strong><span>AB/2 · MN · I · V · K · r düzeni otomatik tanınır.</span></div> : null}
+              {!records.length ? <div className="des-list-empty"><FileSpreadsheet size={28} /><strong>DES Excel yükleyin</strong><span>Eski I · V · K · r ve yeni Idüz · Vdüz · Iters · Vters · K · r1 · r2 · rort düzenleri otomatik tanınır.</span></div> : null}
             </div>
           </aside>
 
           <main className="des-main-pane">
-            {!selected ? <div className="des-empty"><FileSpreadsheet size={38} /><strong>Henüz DES verisi yok</strong><span>Gönderdiğin DES 26 / 30 / 34 formatındaki .xlsx dosyalarını doğrudan yükleyebilirsin.</span><button type="button" onClick={() => fileInputRef.current?.click()}><Upload size={16} /> Excel seç</button></div> : null}
+            {!selected ? <div className="des-empty"><FileSpreadsheet size={38} /><strong>Henüz DES verisi yok</strong><span>Klasik ve çift yönlü DES .xlsx dosyalarını doğrudan yükleyebilirsin.</span><button type="button" onClick={() => fileInputRef.current?.click()}><Upload size={16} /> Excel seç</button></div> : null}
 
             {selected && tab === 'data' ? (
               <div className="des-data-view">
@@ -532,7 +565,7 @@ export default function DESAnalysisFeature() {
                   <label className="span-3"><span>Not</span><input value={selected.note} onChange={(event) => updateSelected({ note: event.target.value })} placeholder="Saha notu / hat bilgisi / açıklama" /></label>
                 </div>
                 <div className={`des-model-ready ${quality?.coordinateReady ? 'ready' : ''}`}><MapPin size={17} /><div><strong>{quality?.coordinateReady ? '2B / 3B modelleme için konum hazır' : 'Modelleme için koordinat eklenmeli'}</strong><span>DES ölçümleri kaydedildi. E/N koordinatı ve kot eklendiğinde sonraki kesit/3B modelleme aşamasına hazır olur.</span></div></div>
-                <div className="des-table-wrap"><table><thead><tr><th>#</th><th>AB/2</th><th>MN</th><th>I</th><th>V</th><th>K</th><th>ρa (Ωm)</th></tr></thead><tbody>{selected.measurements.map((item, index) => <tr key={`${item.ab2}-${item.mn}-${index}`}><td>{index + 1}</td><td>{item.ab2}</td><td>{item.mn}</td><td>{item.current ?? '—'}</td><td>{item.voltage ?? '—'}</td><td>{item.k?.toFixed(3) ?? '—'}</td><td><strong>{item.rho.toFixed(2)}</strong></td></tr>)}</tbody></table></div>
+                <div className="des-table-wrap"><table><thead><tr><th>#</th><th>AB/2</th><th>MN</th><th>I düz / ters</th><th>V düz / ters</th><th>K</th><th>ρa (Ωm)</th></tr></thead><tbody>{selected.measurements.map((item, index) => <tr key={`${item.ab2}-${item.mn}-${index}`}><td>{index + 1}</td><td>{item.ab2}</td><td>{item.mn}</td><td>{item.currentReverse !== null ? `${item.current ?? '—'} / ${item.currentReverse}` : item.current ?? '—'}</td><td>{item.voltageReverse !== null ? `${item.voltage ?? '—'} / ${item.voltageReverse}` : item.voltage ?? '—'}</td><td>{item.k?.toFixed(3) ?? '—'}</td><td><strong>{item.rho.toFixed(2)}</strong></td></tr>)}</tbody></table></div>
               </div>
             ) : null}
 
@@ -544,13 +577,13 @@ export default function DESAnalysisFeature() {
               <div className="des-quality-view">
                 <div className="des-section-heading"><div><strong>Ölçüm Kalite Kontrolü</strong><small>Excel formülü, MN geçiş tekrarları ve veri bütünlüğü</small></div><span className={`des-quality-badge ${quality?.tone}`}>{quality?.label}</span></div>
                 <div className="des-quality-grid">
-                  <article><CheckCircle2 size={20} /><div><strong>{quality?.formulas.checked ?? 0} satır formül kontrolü</strong><span>K × V / I ile ρa karşılaştırıldı.</span><b>{quality?.formulas.mismatches.length ? `${quality.formulas.mismatches.length} uyumsuz satır` : 'Uyumlu'}</b></div></article>
+                  <article><CheckCircle2 size={20} /><div><strong>{quality?.formulas.checked ?? 0} satır formül kontrolü</strong><span>K × V / I; çift yönlü dosyada düz ve ters sonucun ortalamasıyla ρa karşılaştırıldı.</span><b>{quality?.formulas.mismatches.length ? `${quality.formulas.mismatches.length} uyumsuz satır` : 'Uyumlu'}</b></div></article>
                   <article><Activity size={20} /><div><strong>{quality?.repeats.length ?? 0} tekrar AB/2 noktası</strong><span>MN değişimindeki ortak ölçüler karşılaştırıldı.</span><b>Maks. fark %{quality?.maxRepeat.toFixed(2)}</b></div></article>
-                  <article><Database size={20} /><div><strong>{selected.measurements.length} geçerli ölçüm</strong><span>Hatalı/boş Excel satırları otomatik dışarıda bırakıldı.</span><b>{selected.measurements.every((item) => item.rho > 0) ? 'Veri bütünlüğü iyi' : 'Kontrol gerekli'}</b></div></article>
+                  <article><Database size={20} /><div><strong>{selected.measurements.length} geçerli ölçüm</strong><span>Hatalı/boş Excel satırları ve #DIV/0! sonuçları otomatik dışarıda bırakıldı.</span><b>{selected.measurements.every((item) => item.rho > 0) ? 'Veri bütünlüğü iyi' : 'Kontrol gerekli'}</b></div></article>
                   <article><MapPin size={20} /><div><strong>{quality?.coordinateReady ? 'Koordinat mevcut' : 'Koordinat eksik'}</strong><span>2B kesit ve 3B korelasyon için E/N gerekir.</span><b>{quality?.coordinateReady ? `${selected.zone}${selected.hemisphere}` : 'Henüz hazır değil'}</b></div></article>
                 </div>
                 <div className="des-repeat-section"><h3>MN Geçiş / Tekrar Kontrolü</h3>{quality?.repeats.length ? <div className="des-repeat-list">{quality.repeats.map((item) => <div key={item.ab2} className={item.differencePct > 10 ? 'danger' : item.differencePct > 5 ? 'warning' : 'good'}><span><strong>AB/2 = {item.ab2} m</strong><small>{item.values.map((value) => `MN ${value.mn}: ${value.rho.toFixed(2)} Ωm`).join(' · ')}</small></span><b>%{item.differencePct.toFixed(2)}</b></div>)}</div> : <p className="des-quality-note">Aynı AB/2 değerinde tekrar ölçüm bulunmadı.</p>}</div>
-                {quality?.formulas.mismatches.length ? <div className="des-warning-box"><AlertTriangle size={17} /><div><strong>Excel formül uyuşmazlığı bulundu</strong><span>{quality.formulas.mismatches.slice(0, 5).map((item) => `AB/2 ${item.ab2} m (%${item.differencePct.toFixed(2)})`).join(' · ')}</span></div></div> : <div className="des-success-box"><CheckCircle2 size={17} /><div><strong>Görünür özdirenç hesapları tutarlı</strong><span>Kontrol edilebilen satırlarda K × V / I sonucu Excel ρa değerleriyle uyumlu.</span></div></div>}
+                {quality?.formulas.mismatches.length ? <div className="des-warning-box"><AlertTriangle size={17} /><div><strong>Excel formül uyuşmazlığı bulundu</strong><span>{quality.formulas.mismatches.slice(0, 5).map((item) => `AB/2 ${item.ab2} m (%${item.differencePct.toFixed(2)})`).join(' · ')}</span></div></div> : <div className="des-success-box"><CheckCircle2 size={17} /><div><strong>Görünür özdirenç hesapları tutarlı</strong><span>Kontrol edilebilen satırlarda hesaplanan değerler Excel ρa / rort sonuçlarıyla uyumlu.</span></div></div>}
               </div>
             ) : null}
           </main>

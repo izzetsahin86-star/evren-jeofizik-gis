@@ -16,6 +16,7 @@ import DocumentCoordinateFeatureV3 from './components/DocumentCoordinateFeatureV
 import UndergroundModelFeature from './components/UndergroundModelFeature'
 import UndergroundModelV2Feature from './components/UndergroundModelV2Feature'
 import DESAnalysisFeature from './components/DESAnalysisFeature'
+import DESProfessionalFeature from './components/DESProfessionalFeature'
 
 // Feature modules are mounted independently so existing GIS flows stay isolated.
 createRoot(document.getElementById('root')!).render(
@@ -31,6 +32,7 @@ createRoot(document.getElementById('root')!).render(
     <UndergroundModelFeature />
     <UndergroundModelV2Feature />
     <DESAnalysisFeature />
+    <DESProfessionalFeature />
   </StrictMode>,
 )
 

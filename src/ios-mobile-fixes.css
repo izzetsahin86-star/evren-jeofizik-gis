@@ -78,12 +78,26 @@ input, textarea, select, button {
   }
 }
 
+/* The GIS already handles safe areas internally:
+   - SmartHeader includes env(safe-area-inset-top)
+   - SmartDock includes env(safe-area-inset-bottom)
+   Adding safe-area padding to body duplicated those insets and created the
+   white bands visible above and below the app on iPhone home-screen PWA. */
 @media (display-mode: standalone) {
-  body {
-    min-height: 100dvh;
-    padding-top: env(safe-area-inset-top);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-    padding-bottom: env(safe-area-inset-bottom);
+  html,
+  body,
+  #root,
+  .app-shell {
+    width: 100% !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body,
+  #root,
+  .app-shell {
+    background: #0b1628;
   }
 }

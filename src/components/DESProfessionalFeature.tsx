@@ -3,6 +3,7 @@ import {
   Activity,
   BarChart3,
   Download,
+  FileText,
   Layers3,
   RefreshCw,
   Save,
@@ -21,6 +22,11 @@ import {
   type DesLayerModel,
   type ObservedPoint,
 } from './DESProfessionalEngine'
+import {
+  exportDesProfessionalReport,
+  type DesReportFormat,
+  type DesReportSnapshot,
+} from './DESProfessionalExport'
 import './DESProfessionalFeature.css'
 
 const RECORDS_KEY = 'evren-jeofizik-gis-des-analysis-v1'
@@ -57,6 +63,10 @@ type SavedModel = {
   curveType: string
   method: string
   updatedAt: number
+}
+
+function cloneLayers(layers: DesLayerModel[]) {
+  return layers.map((layer) => ({ ...layer }))
 }
 
 function finiteOrNull(value: unknown) {
@@ -126,6 +136,20 @@ function readModels(): Record<string, SavedModel> {
   } catch {
     return {}
   }
+}
+
+function draftSet(records: DesRecord[], models: Record<string, SavedModel>, previous: Record<string, DesLayerModel[]> = {}) {
+  const next: Record<string, DesLayerModel[]> = {}
+  records.forEach((record) => {
+    const existing = previous[record.id]
+    const saved = models[record.id]?.layers
+    next[record.id] = existing?.length
+      ? cloneLayers(existing)
+      : saved?.length
+        ? cloneLayers(saved)
+        : createInitialLayers(prepareObserved(record.measurements), 4)
+  })
+  return next
 }
 
 function niceLogTicks(min: number, max: number) {
@@ -253,28 +277,44 @@ export default function DESProfessionalFeature() {
   const [selectedId, setSelectedId] = useState<string | null>(() => readRecords()[0]?.id ?? null)
   const [models, setModels] = useState<Record<string, SavedModel>>(readModels)
   const [layers, setLayers] = useState<DesLayerModel[]>([])
+  const [drafts, setDrafts] = useState<Record<string, DesLayerModel[]>>({})
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exportIds, setExportIds] = useState<string[]>([])
+  const [perPage, setPerPage] = useState<1 | 2 | 3 | 4>(1)
+  const [exportBusy, setExportBusy] = useState(false)
+  const [exportStatus, setExportStatus] = useState('')
   const selected = records.find((record) => record.id === selectedId) ?? records[0] ?? null
   const observed = useMemo(() => prepareObserved(selected?.measurements || []), [selected])
 
-  const loadLayersFor = (record: DesRecord | null, currentModels = models) => {
+  const layersFor = (record: DesRecord, currentModels = models, currentDrafts = drafts) => {
+    const draft = currentDrafts[record.id]
+    if (draft?.length) return cloneLayers(draft)
+    const saved = currentModels[record.id]?.layers
+    if (saved?.length) return cloneLayers(saved)
+    return createInitialLayers(prepareObserved(record.measurements), 4)
+  }
+
+  const loadLayersFor = (record: DesRecord | null, currentModels = models, currentDrafts = drafts) => {
     if (!record) { setLayers([]); return }
-    const observedData = prepareObserved(record.measurements)
-    const saved = currentModels[record.id]
-    setLayers(saved?.layers?.length ? saved.layers.map((layer) => ({ ...layer })) : createInitialLayers(observedData, 4))
+    setLayers(layersFor(record, currentModels, currentDrafts))
   }
 
   useEffect(() => {
     const show = () => {
       const nextRecords = readRecords()
       const nextModels = readModels()
+      const nextDrafts = draftSet(nextRecords, nextModels)
       setRecords(nextRecords)
       setModels(nextModels)
+      setDrafts(nextDrafts)
       const target = nextRecords.find((record) => record.id === selectedId) ?? nextRecords[0] ?? null
       setSelectedId(target?.id ?? null)
-      loadLayersFor(target, nextModels)
+      loadLayersFor(target, nextModels, nextDrafts)
       setStatus('')
+      setExportOpen(false)
+      setExportStatus('')
       setOpen(true)
     }
     window.addEventListener(OPEN_EVENT, show)
@@ -283,11 +323,17 @@ export default function DESProfessionalFeature() {
 
   useEffect(() => {
     const refresh = () => {
-      const next = readRecords()
-      setRecords(next)
-      const target = next.find((record) => record.id === selectedId) ?? next[0] ?? null
+      const nextRecords = readRecords()
+      const nextModels = readModels()
+      const previous = { ...drafts }
+      if (selected && layers.length) previous[selected.id] = cloneLayers(layers)
+      const nextDrafts = draftSet(nextRecords, nextModels, previous)
+      setRecords(nextRecords)
+      setModels(nextModels)
+      setDrafts(nextDrafts)
+      const target = nextRecords.find((record) => record.id === selectedId) ?? nextRecords[0] ?? null
       setSelectedId(target?.id ?? null)
-      loadLayersFor(target)
+      loadLayersFor(target, nextModels, nextDrafts)
     }
     window.addEventListener('evren-des-analysis-changed', refresh)
     return () => window.removeEventListener('evren-des-analysis-changed', refresh)
@@ -297,10 +343,14 @@ export default function DESProfessionalFeature() {
     if (!open) return
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
+    const close = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (exportOpen) setExportOpen(false)
+      else setOpen(false)
+    }
     window.addEventListener('keydown', close)
     return () => { document.body.style.overflow = previous; window.removeEventListener('keydown', close) }
-  }, [open])
+  }, [open, exportOpen])
 
   useEffect(() => {
     const clear = (event: MouseEvent) => {
@@ -310,6 +360,7 @@ export default function DESProfessionalFeature() {
       if (!button || button.textContent?.trim() !== CLEAR_LABEL) return
       localStorage.removeItem(MODELS_KEY)
       setModels({})
+      setDrafts({})
       setLayers([])
     }
     document.addEventListener('click', clear, true)
@@ -322,28 +373,44 @@ export default function DESProfessionalFeature() {
   const fit = fitTone(rms)
   const modelDepth = layers.slice(0, -1).reduce((sum, layer) => sum + (layer.thickness || 0), 0)
 
+  const rememberCurrent = () => {
+    if (!selected || !layers.length) return
+    setDrafts((current) => ({ ...current, [selected.id]: cloneLayers(layers) }))
+  }
+
   const chooseRecord = (record: DesRecord) => {
+    if (selected && layers.length) {
+      setDrafts((current) => ({ ...current, [selected.id]: cloneLayers(layers) }))
+    }
     setSelectedId(record.id)
     loadLayersFor(record)
     setStatus('')
   }
 
   const setLayerCount = (count: number) => {
-    setLayers(createInitialLayers(observed, count))
+    const next = createInitialLayers(observed, count)
+    setLayers(next)
+    if (selected) setDrafts((current) => ({ ...current, [selected.id]: cloneLayers(next) }))
     setStatus(`${count} tabakalı yeni başlangıç modeli oluşturuldu.`)
   }
 
   const updateLayer = (index: number, patch: Partial<DesLayerModel>) => {
-    setLayers((current) => current.map((layer, layerIndex) => layerIndex === index ? { ...layer, ...patch } : layer))
+    setLayers((current) => {
+      const next = current.map((layer, layerIndex) => layerIndex === index ? { ...layer, ...patch } : layer)
+      if (selected) setDrafts((stored) => ({ ...stored, [selected.id]: cloneLayers(next) }))
+      return next
+    })
   }
 
   const autoFit = () => {
     if (!selected || observed.length < 4 || layers.length < 3) return
+    const recordId = selected.id
     setBusy(true)
     setStatus('1B model otomatik uyumlanıyor…')
     window.setTimeout(() => {
       const result = fitLayerModel(observed, layers.length, layers)
       setLayers(result.layers)
+      setDrafts((current) => ({ ...current, [recordId]: cloneLayers(result.layers) }))
       setStatus(`Otomatik uyum tamamlandı · Log RMS ${result.rms.toFixed(2)}% · ${result.iterations} arama adımı.`)
       setBusy(false)
     }, 30)
@@ -352,7 +419,9 @@ export default function DESProfessionalFeature() {
   const resetModel = () => {
     if (!selected) return
     const saved = models[selected.id]
-    setLayers(saved?.layers?.length ? saved.layers.map((layer) => ({ ...layer })) : createInitialLayers(observed, 4))
+    const next = saved?.layers?.length ? cloneLayers(saved.layers) : createInitialLayers(observed, 4)
+    setLayers(next)
+    setDrafts((current) => ({ ...current, [selected.id]: cloneLayers(next) }))
     setStatus(saved ? 'Son kaydedilen modele dönüldü.' : 'Başlangıç modeli yeniden oluşturuldu.')
   }
 
@@ -360,7 +429,7 @@ export default function DESProfessionalFeature() {
     if (!selected || !layers.length) return
     const saved: SavedModel = {
       recordId: selected.id,
-      layers: layers.map((layer) => ({ ...layer })),
+      layers: cloneLayers(layers),
       rms,
       curveType,
       method: 'Schlumberger · Ghosh tipi 9 noktalı dijital filtre yaklaşımı · log-uzay uyum',
@@ -368,8 +437,50 @@ export default function DESProfessionalFeature() {
     }
     const next = { ...models, [selected.id]: saved }
     setModels(next)
+    setDrafts((current) => ({ ...current, [selected.id]: cloneLayers(layers) }))
     localStorage.setItem(MODELS_KEY, JSON.stringify(next))
     setStatus('1B DES modeli kaydedildi. Ham DES verisi değiştirilmedi.')
+  }
+
+  const showExport = () => {
+    rememberCurrent()
+    const ids = records.map((record) => record.id)
+    setExportIds(ids)
+    setPerPage(Math.max(1, Math.min(4, ids.length)) as 1 | 2 | 3 | 4)
+    setExportStatus('')
+    setExportOpen(true)
+  }
+
+  const toggleExportId = (id: string) => {
+    setExportIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
+  }
+
+  const snapshotsForExport = () => {
+    const liveDrafts = { ...drafts }
+    if (selected && layers.length) liveDrafts[selected.id] = cloneLayers(layers)
+    return exportIds.flatMap((id): DesReportSnapshot[] => {
+      const record = records.find((item) => item.id === id)
+      if (!record) return []
+      return [{ record, layers: layersFor(record, models, liveDrafts) }]
+    })
+  }
+
+  const runExport = async (format: DesReportFormat) => {
+    const snapshots = snapshotsForExport()
+    if (!snapshots.length) {
+      setExportStatus('En az bir DES seçin.')
+      return
+    }
+    setExportBusy(true)
+    setExportStatus(`${format === 'pdf' ? 'PDF' : 'Word'} hazırlanıyor…`)
+    try {
+      const result = await exportDesProfessionalReport(snapshots, perPage, format)
+      setExportStatus(`${result.desCount} DES · ${result.pages} sayfa hazırlandı ve indirildi.`)
+    } catch (error) {
+      setExportStatus(error instanceof Error ? error.message : 'Rapor oluşturulamadı.')
+    } finally {
+      setExportBusy(false)
+    }
   }
 
   if (!open) return null
@@ -388,8 +499,8 @@ export default function DESProfessionalFeature() {
           <div className="despro-layout">
             <aside className="despro-sidebar">
               <div className="despro-sidebar-head"><strong>DES Kayıtları</strong><small>{records.length} ölçüm noktası</small></div>
-              <div className="despro-records">{records.map((record) => <button type="button" key={record.id} className={record.id === selected?.id ? 'is-active' : ''} onClick={() => chooseRecord(record)}><span /><div><strong>{record.name}</strong><small>{record.measurements.length} ham ölçüm · {models[record.id] ? 'Model kayıtlı' : 'Model yok'}</small></div></button>)}</div>
-              <div className="despro-sidebar-note"><strong>Veri güvenliği</strong><span>Bu ekran V1 ham DES kayıtlarını değiştirmez. 1B modeller ayrı depolanır.</span></div>
+              <div className="despro-records">{records.map((record) => <button type="button" key={record.id} className={record.id === selected?.id ? 'is-active' : ''} onClick={() => chooseRecord(record)}><span /><div><strong>{record.name}</strong><small>{record.measurements.length} ham ölçüm · {models[record.id] ? 'Model kayıtlı' : 'Canlı model'}</small></div></button>)}</div>
+              <div className="despro-sidebar-note"><strong>Veri güvenliği</strong><span>Bu ekran V1 ham DES kayıtlarını değiştirmez. Model düzenlemeleri oturum boyunca son haliyle korunur.</span></div>
             </aside>
 
             <main className="despro-main">
@@ -397,6 +508,7 @@ export default function DESProfessionalFeature() {
                 <div className="despro-toolbar">
                   <div><small>SEÇİLİ DES</small><h3>{selected.name}</h3><span>{[selected.province, selected.district].filter(Boolean).join(' · ') || selected.fileName}</span></div>
                   <div className="despro-toolbar-actions">
+                    <button type="button" className="report" onClick={showExport}><FileText size={15} /> PDF / Word</button>
                     <button type="button" onClick={resetModel}><RefreshCw size={15} /> Geri Al</button>
                     <button type="button" className="primary" onClick={saveModel}><Save size={15} /> Modeli Kaydet</button>
                   </div>
@@ -436,6 +548,39 @@ export default function DESProfessionalFeature() {
           </div>
         )}
       </section>
+
+      {exportOpen ? (
+        <div className="despro-export-backdrop" role="dialog" aria-modal="true" aria-label="DES raporu dışa aktar">
+          <section className="despro-export-dialog">
+            <header><div><small>PROFESYONEL RAPOR</small><h3>PDF / Word Dışa Aktar</h3><p>Ekranda yaptığınız işlemlerden sonraki <strong>son DES modeli</strong> kullanılır. Kaydetmeden yaptığınız son değişiklikler de rapora dahildir.</p></div><button type="button" onClick={() => setExportOpen(false)} aria-label="Rapor penceresini kapat"><X size={19} /></button></header>
+
+            <div className="despro-export-body">
+              <section className="despro-export-section">
+                <div className="despro-export-section-title"><div><strong>Raporlanacak DES'ler</strong><small>{exportIds.length} / {records.length} seçili</small></div>{records.length > 1 ? <div><button type="button" onClick={() => setExportIds(records.map((record) => record.id))}>Tümünü seç</button><button type="button" onClick={() => setExportIds([])}>Temizle</button></div> : null}</div>
+                <div className="despro-export-records">
+                  {records.map((record) => <label key={record.id} className={exportIds.includes(record.id) ? 'is-selected' : ''}><input type="checkbox" checked={exportIds.includes(record.id)} onChange={() => toggleExportId(record.id)} /><span><strong>{record.name}</strong><small>{record.id === selected?.id ? 'Ekranda görünen canlı son model' : models[record.id] ? 'Son kayıtlı / oturum modeli' : 'Oturumdaki model'}</small></span></label>)}
+                </div>
+              </section>
+
+              <section className="despro-export-section">
+                <div className="despro-export-section-title"><div><strong>1 sayfada kaç DES olsun?</strong><small>Maksimum 4 DES / sayfa</small></div></div>
+                <div className="despro-export-page-count">
+                  {([1, 2, 3, 4] as const).map((count) => <button type="button" key={count} className={perPage === count ? 'is-active' : ''} onClick={() => setPerPage(count)}><strong>{count}</strong><span>{count === 1 ? 'DES / sayfa' : 'DES / sayfa'}</span></button>)}
+                </div>
+                <div className="despro-export-preview"><FileText size={18} /><span>Her DES bloğunda <strong>Gözlenen / Hesaplanan Eğri</strong> ve <strong>1B Elektriksel Model</strong> birlikte yer alır.</span></div>
+              </section>
+            </div>
+
+            {exportStatus ? <div className="despro-export-status">{exportStatus}</div> : null}
+
+            <footer>
+              <button type="button" className="secondary" onClick={() => setExportOpen(false)} disabled={exportBusy}>Vazgeç</button>
+              <button type="button" className="pdf" onClick={() => void runExport('pdf')} disabled={exportBusy || exportIds.length === 0}><Download size={17} /> {exportBusy ? 'Hazırlanıyor…' : 'PDF İndir'}</button>
+              <button type="button" className="word" onClick={() => void runExport('docx')} disabled={exportBusy || exportIds.length === 0}><Download size={17} /> {exportBusy ? 'Hazırlanıyor…' : 'Word İndir'}</button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
     </div>
   )
 }

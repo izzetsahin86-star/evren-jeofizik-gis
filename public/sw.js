@@ -1,7 +1,7 @@
-const CACHE_VERSION = 'evren-gis-v43'
+const CACHE_VERSION = 'evren-gis-v44'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const TILE_CACHE = `${CACHE_VERSION}-tiles`
-const SHELL_FILES = ['/', '/index.html', '/offline.html', '/manifest.webmanifest', '/icons/evren-gis.svg', '/icons/apple-touch-icon.png', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png', '/icons/evren-jeofizik-logo.svg', '/fonts/EvrenSans.ttf', '/fonts/EvrenSans-Bold.ttf']
+const SHELL_FILES = ['/', '/index.html', '/offline.html', '/manifest.webmanifest', '/icons/evren-jeofizik-touch-v2.png', '/icons/evren-jeofizik-192-v2.png', '/icons/evren-jeofizik-512-v2.png', '/icons/evren-jeofizik-maskable-512-v2.png', '/icons/evren-jeofizik-logo.svg', '/fonts/EvrenSans.ttf', '/fonts/EvrenSans-Bold.ttf']
 const TILE_HOSTS = ['basemaps.cartocdn.com', 'arcgisonline.com', 'tile.opentopomap.org']
 
 async function trimCache(cacheName, maximum) {

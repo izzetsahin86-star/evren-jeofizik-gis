@@ -49,7 +49,63 @@ createRoot(document.getElementById('root')!).render(
 )
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  let updateCheckRunning = false
+
+  const getCurrentEntryAsset = () => {
+    const scripts = Array.from(document.querySelectorAll<HTMLScriptElement>('script[type="module"][src]'))
+    for (const script of scripts) {
+      const pathname = new URL(script.src, window.location.href).pathname
+      if (pathname.startsWith('/assets/')) return pathname
+    }
+    return null
+  }
+
+  const getEntryAssetFromHtml = (html: string) => {
+    const scriptTags = html.match(/<script\b[^>]*>/gi) ?? []
+    for (const tag of scriptTags) {
+      if (!/\btype=["']module["']/i.test(tag)) continue
+      const srcMatch = tag.match(/\bsrc=["']([^"']+)["']/i)
+      if (!srcMatch) continue
+      const pathname = new URL(srcMatch[1], window.location.href).pathname
+      if (pathname.startsWith('/assets/')) return pathname
+    }
+    return null
+  }
+
+  const checkForWebUpdate = async () => {
+    if (updateCheckRunning) return
+    updateCheckRunning = true
+    try {
+      const response = await fetch(`/index.html?app-update=${Date.now()}`, { cache: 'no-store' })
+      if (!response.ok) return
+      const latestEntryAsset = getEntryAssetFromHtml(await response.text())
+      const currentEntryAsset = getCurrentEntryAsset()
+      if (latestEntryAsset && currentEntryAsset && latestEntryAsset !== currentEntryAsset) {
+        window.location.reload()
+      }
+    } catch {
+      // Offline or temporarily unreachable: keep the current installed app running.
+    } finally {
+      updateCheckRunning = false
+    }
+  }
+
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => undefined)
+    navigator.serviceWorker
+      .register('/sw.js', { updateViaCache: 'none' })
+      .then((registration) => {
+        const refresh = () => {
+          registration.update().catch(() => undefined)
+          void checkForWebUpdate()
+        }
+
+        refresh()
+        window.addEventListener('focus', refresh)
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') refresh()
+        })
+        window.setInterval(refresh, 15 * 60 * 1000)
+      })
+      .catch(() => undefined)
   })
 }

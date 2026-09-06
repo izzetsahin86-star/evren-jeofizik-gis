@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node ./scripts/generate-pwa-icons.mjs",
     "dev": "node --require ./scripts/vite-network-fix.cjs ./node_modules/vite/bin/vite.js --host 0.0.0.0",
     "prebuild": "node ./scripts/generate-pwa-icons.mjs",
     "build": "tsc -b && vite build",
@@ -32,7 +33,7 @@
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.2",
     "eslint": "^9.35.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-hooks": "^7.0.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
     "sharp": "^0.35.4",

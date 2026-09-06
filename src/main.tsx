@@ -24,6 +24,9 @@ import DESReportMapsFeature from './components/DESReportMapsFeature'
 import DESBatchActionsFeature from './components/DESBatchActionsFeature'
 import DESAutoDimensionAdvisor from './components/DESAutoDimensionAdvisor'
 import WorkCenterFeature from './components/WorkCenterFeature'
+import { startTransientFeedbackAutoDismiss } from './transientFeedbackAutoDismiss'
+
+startTransientFeedbackAutoDismiss()
 
 // Feature modules are mounted independently so existing GIS flows stay isolated.
 createRoot(document.getElementById('root')!).render(

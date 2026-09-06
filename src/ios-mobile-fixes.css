@@ -33,7 +33,7 @@ input, textarea, select, button {
   }
 
   /* Address search used to force a 250px minimum width from its map anchor,
-     which could push the 402px iPhone 17 viewport sideways when the keyboard opened. */
+     which could push the iPhone viewport sideways when the keyboard opened. */
   .map-address-search.is-open {
     left: max(10px, env(safe-area-inset-left)) !important;
     right: max(10px, env(safe-area-inset-right)) !important;
@@ -67,22 +67,24 @@ input, textarea, select, button {
     overflow-wrap: anywhere;
   }
 
-  /* Keep fixed/mobile panels inside rounded iPhone display edges. */
-  .modal,
-  .dialog,
-  .panel,
+  /* Only card-like content is width constrained. Full-screen dialog overlays
+     must stay full width; constraining [role="dialog"] narrowed DES/Admin screens. */
   .panel-card,
-  .sheet,
+  .admin-login-card,
+  .admin-history-card,
+  .admin-confirm-card {
+    max-width: calc(100vw - 20px) !important;
+  }
+
   [role="dialog"] {
-    max-width: calc(100vw - max(16px, env(safe-area-inset-left)) - max(16px, env(safe-area-inset-right)));
+    max-width: none !important;
   }
 }
 
-/* The GIS already handles safe areas internally:
+/* The main GIS already handles safe areas internally:
    - SmartHeader includes env(safe-area-inset-top)
-   - SmartDock includes env(safe-area-inset-bottom)
-   Adding safe-area padding to body duplicated those insets and created the
-   white bands visible above and below the app on iPhone home-screen PWA. */
+   - SmartDock and mobile sheets include env(safe-area-inset-bottom)
+   Therefore body itself must NOT get safe-area padding. */
 @media (display-mode: standalone) {
   html,
   body,
@@ -99,5 +101,91 @@ input, textarea, select, button {
   #root,
   .app-shell {
     background: #0b1628;
+  }
+}
+
+/* Internal full-screen windows need their own safe-area treatment because they
+   replace the SmartHeader/SmartDock while open. */
+@media (max-width: 600px) and (display-mode: standalone) {
+  .work-center-chrome {
+    width: 100vw !important;
+    max-width: none !important;
+    height: calc(118px + env(safe-area-inset-top)) !important;
+    padding-top: env(safe-area-inset-top) !important;
+  }
+
+  body.evren-work-center-open :is(
+    .underground-overlay,
+    .des-overlay,
+    .despro-overlay,
+    .descal-overlay,
+    .desdual-overlay,
+    .desreport-overlay
+  ) {
+    top: calc(118px + env(safe-area-inset-top)) !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: calc(100dvh - 118px - env(safe-area-inset-top)) !important;
+    max-width: none !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
+
+  /* Directly opened DES / 3B windows (outside Work Center). */
+  body:not(.evren-work-center-open) :is(
+    .underground-overlay,
+    .des-overlay,
+    .despro-overlay,
+    .descal-overlay,
+    .desdual-overlay,
+    .desreport-overlay
+  ) {
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-width: none !important;
+    padding-top: env(safe-area-inset-top) !important;
+    padding-right: 0 !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    padding-left: 0 !important;
+  }
+
+  body:not(.evren-work-center-open) :is(
+    .underground-shell,
+    .des-shell,
+    .despro-shell,
+    .descal-shell,
+    .desdual-shell,
+    .desreport-shell
+  ) {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* Admin is another full-screen surface; keep controls below Dynamic Island
+     while the background itself still fills the whole display. */
+  .admin-portal {
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-width: none !important;
+  }
+
+  .admin-dashboard {
+    height: 100% !important;
+    padding-top: env(safe-area-inset-top) !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
+
+  .admin-history-overlay,
+  .admin-confirm-overlay {
+    max-width: none !important;
+    padding-top: max(18px, env(safe-area-inset-top)) !important;
+    padding-bottom: max(18px, env(safe-area-inset-bottom)) !important;
   }
 }

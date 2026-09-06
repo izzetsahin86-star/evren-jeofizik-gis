@@ -133,6 +133,12 @@ export default function DESBatchActionsFeature() {
     return () => observer.disconnect()
   }, [])
 
+  useEffect(() => {
+    if (!status || busyMode) return
+    const timer = window.setTimeout(() => setStatus(''), 1000)
+    return () => window.clearTimeout(timer)
+  }, [status, busyMode])
+
   const autoFitAll = async () => {
     if (busyMode) return
     const records = readRecords()

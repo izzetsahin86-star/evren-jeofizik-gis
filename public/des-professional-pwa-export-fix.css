@@ -1,215 +1,289 @@
-/* DES Professional PDF/Word export dialog — iPhone/PWA usability fix */
+/* DES Professional PDF/Word export dialog — hard mobile/PWA layout fix */
 
 @media (max-width: 900px) {
-  .despro-export-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 5200;
-    align-items: stretch;
-    justify-content: stretch;
-    padding: env(safe-area-inset-top, 0px) 0 0;
-    overflow: hidden;
-    overscroll-behavior: contain;
+  .despro-overlay .despro-export-backdrop {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 99999 !important;
+    display: flex !important;
+    align-items: stretch !important;
+    justify-content: stretch !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px) !important;
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
+    background: #06111a !important;
   }
 
-  .despro-export-dialog {
-    width: 100%;
-    max-width: none;
-    height: 100%;
-    max-height: none;
-    min-height: 0;
-    border-radius: 0;
-    border-left: 0;
-    border-right: 0;
-    border-bottom: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+  .despro-overlay .despro-export-dialog {
+    position: relative !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-bottom: 0 !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
   }
 
-  .despro-export-dialog > header {
-    flex: 0 0 auto;
-    gap: 10px;
-    padding: 12px 12px 10px;
+  .despro-overlay .despro-export-dialog > header {
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+    gap: 8px !important;
+    padding: 9px 10px 8px !important;
+    box-sizing: border-box !important;
   }
 
-  .despro-export-dialog > header > div {
-    min-width: 0;
+  .despro-overlay .despro-export-dialog > header > div {
+    min-width: 0 !important;
   }
 
-  .despro-export-dialog > header h3 {
-    margin: 2px 0 4px;
-    font-size: 18px;
+  .despro-overlay .despro-export-dialog > header small {
+    font-size: 8px !important;
   }
 
-  .despro-export-dialog > header p {
-    font-size: 9px;
-    line-height: 1.4;
+  .despro-overlay .despro-export-dialog > header h3 {
+    margin: 1px 0 0 !important;
+    font-size: 17px !important;
+    line-height: 1.15 !important;
   }
 
-  .despro-export-dialog > header > button {
-    width: 44px;
-    height: 44px;
-    min-width: 44px;
-    min-height: 44px;
+  .despro-overlay .despro-export-dialog > header p {
+    display: none !important;
   }
 
-  .despro-export-body {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    padding: 10px 10px 12px;
-    gap: 10px;
+  .despro-overlay .despro-export-dialog > header > button {
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+    min-height: 42px !important;
+    flex: 0 0 42px !important;
   }
 
-  .despro-export-section {
-    padding: 10px;
-    border-radius: 13px;
+  .despro-overlay .despro-export-body {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    padding: 7px 8px !important;
+    gap: 7px !important;
+    display: grid !important;
+    grid-template-rows: minmax(0, 1fr) auto !important;
+    box-sizing: border-box !important;
   }
 
-  .despro-export-section-title {
-    align-items: flex-start;
-    gap: 8px;
-    margin-bottom: 8px;
+  .despro-overlay .despro-export-section {
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    padding: 8px !important;
+    border-radius: 11px !important;
   }
 
-  .despro-export-section-title > div:last-child {
-    flex-wrap: wrap;
-    justify-content: flex-end;
+  .despro-overlay .despro-export-section:first-child {
+    min-height: 0 !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
   }
 
-  .despro-export-section-title button {
-    min-height: 36px;
-    padding: 7px 9px;
+  .despro-overlay .despro-export-section:nth-child(2) {
+    flex: 0 0 auto !important;
   }
 
-  .despro-export-records {
-    grid-template-columns: 1fr;
-    max-height: 34dvh;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    padding-right: 2px;
+  .despro-overlay .despro-export-section-title {
+    flex: 0 0 auto !important;
+    align-items: center !important;
+    gap: 6px !important;
+    margin-bottom: 6px !important;
   }
 
-  .despro-export-records label {
-    min-height: 48px;
-    padding: 10px 11px;
-    cursor: default;
+  .despro-overlay .despro-export-section-title strong {
+    font-size: 11px !important;
   }
 
-  .despro-export-records input {
-    width: 20px;
-    height: 20px;
+  .despro-overlay .despro-export-section-title small {
+    font-size: 8px !important;
   }
 
-  .despro-export-records strong {
-    font-size: 12px;
+  .despro-overlay .despro-export-section-title > div:last-child {
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
   }
 
-  .despro-export-records small {
-    font-size: 9px;
-    line-height: 1.3;
+  .despro-overlay .despro-export-section-title button {
+    min-height: 32px !important;
+    padding: 5px 7px !important;
+    font-size: 8px !important;
+    white-space: nowrap !important;
   }
 
-  .despro-export-page-count {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 7px;
+  .despro-overlay .despro-export-records {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    height: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 5px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+    padding: 0 2px 2px 0 !important;
+    touch-action: pan-y !important;
   }
 
-  .despro-export-page-count button {
-    min-height: 52px;
-    padding: 8px;
+  .despro-overlay .despro-export-records label {
+    flex: 0 0 auto !important;
+    min-height: 42px !important;
+    padding: 7px 9px !important;
+    gap: 8px !important;
+    border-radius: 9px !important;
+    box-sizing: border-box !important;
   }
 
-  .despro-export-preview {
-    align-items: flex-start;
-    font-size: 9px;
+  .despro-overlay .despro-export-records input {
+    width: 19px !important;
+    height: 19px !important;
+    flex: 0 0 19px !important;
   }
 
-  .despro-export-status {
-    flex: 0 0 auto;
-    margin: 6px 10px 0;
+  .despro-overlay .despro-export-records strong {
+    font-size: 11px !important;
   }
 
-  .despro-export-dialog > footer {
-    position: relative;
-    z-index: 2;
-    flex: 0 0 auto;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
-    background: #081620;
-    box-shadow: 0 -10px 24px rgba(0, 0, 0, .24);
+  .despro-overlay .despro-export-records small {
+    font-size: 8px !important;
+    line-height: 1.2 !important;
   }
 
-  .despro-export-dialog > footer button {
-    width: 100%;
-    min-width: 0;
-    min-height: 46px;
-    justify-content: center;
-    padding: 10px 8px;
-    font-size: 11px;
+  .despro-overlay .despro-export-page-count {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 5px !important;
   }
 
-  .despro-export-dialog > footer button.secondary {
-    grid-column: 1 / -1;
-    min-height: 40px;
-    order: 3;
+  .despro-overlay .despro-export-page-count button {
+    min-width: 0 !important;
+    min-height: 45px !important;
+    padding: 4px 2px !important;
+    border-radius: 9px !important;
+    gap: 0 !important;
   }
 
-  .despro-export-dialog > footer button.pdf {
-    grid-column: 1;
-    order: 1;
+  .despro-overlay .despro-export-page-count button strong {
+    font-size: 18px !important;
+    line-height: 1 !important;
   }
 
-  .despro-export-dialog > footer button.word {
-    grid-column: 2;
-    order: 2;
+  .despro-overlay .despro-export-page-count button span {
+    font-size: 7px !important;
+    line-height: 1.1 !important;
+    white-space: nowrap !important;
+  }
+
+  .despro-overlay .despro-export-preview {
+    display: none !important;
+  }
+
+  .despro-overlay .despro-export-status {
+    flex: 0 0 auto !important;
+    margin: 4px 8px 0 !important;
+    padding: 7px 9px !important;
+    font-size: 9px !important;
+  }
+
+  .despro-overlay .despro-export-dialog > footer {
+    position: relative !important;
+    z-index: 3 !important;
+    flex: 0 0 auto !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+    padding: 8px !important;
+    box-sizing: border-box !important;
+    background: #081620 !important;
+    box-shadow: 0 -8px 20px rgba(0,0,0,.28) !important;
+  }
+
+  .despro-overlay .despro-export-dialog > footer button {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 46px !important;
+    margin: 0 !important;
+    justify-content: center !important;
+    padding: 9px 6px !important;
+    font-size: 10px !important;
+    box-sizing: border-box !important;
+  }
+
+  .despro-overlay .despro-export-dialog > footer button.secondary {
+    display: none !important;
+  }
+
+  .despro-overlay .despro-export-dialog > footer button.pdf {
+    grid-column: 1 !important;
+  }
+
+  .despro-overlay .despro-export-dialog > footer button.word {
+    grid-column: 2 !important;
   }
 }
 
-@media (max-width: 380px) {
-  .despro-export-dialog > header p {
-    display: none;
+@media (max-width: 390px) {
+  .despro-overlay .despro-export-section-title {
+    align-items: flex-start !important;
   }
 
-  .despro-export-section-title {
-    flex-direction: column;
+  .despro-overlay .despro-export-section-title > div:last-child {
+    flex-direction: column !important;
   }
 
-  .despro-export-section-title > div:last-child {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .despro-export-records {
-    max-height: 31dvh;
+  .despro-overlay .despro-export-section-title button {
+    min-height: 27px !important;
+    padding: 3px 6px !important;
   }
 }
 
-@media (max-width: 900px) and (max-height: 620px) {
-  .despro-export-dialog > header {
-    padding-top: 8px;
-    padding-bottom: 7px;
+@media (max-width: 900px) and (max-height: 680px) {
+  .despro-overlay .despro-export-dialog > header small {
+    display: none !important;
   }
 
-  .despro-export-dialog > header p {
-    display: none;
+  .despro-overlay .despro-export-dialog > header {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
   }
 
-  .despro-export-body {
-    padding-top: 7px;
+  .despro-overlay .despro-export-dialog > header h3 {
+    font-size: 15px !important;
   }
 
-  .despro-export-records {
-    max-height: 30dvh;
+  .despro-overlay .despro-export-section {
+    padding: 6px !important;
   }
 
-  .despro-export-dialog > footer {
-    padding-top: 7px;
+  .despro-overlay .despro-export-records label {
+    min-height: 38px !important;
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+  }
+
+  .despro-overlay .despro-export-page-count button {
+    min-height: 40px !important;
+  }
+
+  .despro-overlay .despro-export-dialog > footer button {
+    min-height: 42px !important;
   }
 }
